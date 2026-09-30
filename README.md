@@ -39,6 +39,28 @@ Only `discovery` exists today. See Build status.
 - [ ] Phase 4: coverage and benchmark
 - [ ] Phase 5: public hiring snapshot page (stretch)
 
+## What the live sources actually do
+
+Four things the public sources do that their docs do not say, each of which the code now
+accounts for. Worth reading before changing discovery or the refresh.
+
+1. **The posting API is case-insensitive on board names.** `/Linear`, `/linear` and
+   `/LINEAR` all return the same 30 jobs. Crawl data contains multiple spellings of the
+   same board, so discovery keeps the most-seen spelling per board. The first run saw
+   8,563 spellings of 7,792 boards: 760 collapsed groups that would otherwise have been
+   duplicate companies, each with its own daily API call, snapshots and triggers.
+2. **Board names can contain spaces and dots.** `Local Infusion`, `the job sauce`,
+   `Viz.ai` and `primer.io` are all real boards with live jobs.
+3. **The board response has no company name.** Top-level keys are `jobs` and
+   `apiVersion` only. The authoritative board spelling comes from each job's `jobUrl`.
+4. **Common Crawl's index server 502s on wide prefix queries** at the default page size,
+   and returns an intermittent 400. Requests use `pageSize=1`, a seven-step backoff
+   ladder, and retry on 400.
+
+A 404 is not evidence of junk. `Stanza` and `DECA Dental Group` are ordinary names that
+404 because they are former Ashby customers. That is attrition, recorded as `not_found`.
+Only structurally impossible shapes are filtered out.
+
 ## Data model
 
 Six tables, defined in `supabase/migrations/`.

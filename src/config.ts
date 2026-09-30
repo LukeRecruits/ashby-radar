@@ -18,6 +18,8 @@ export const config = {
     maxWaybackPages: 200,
     /** Request timeout for CDX endpoints. Their p99 is slow. */
     requestTimeoutMs: 120_000,
+    /** Common Crawl pages are slower still: two aborted at 120s on the first run. */
+    commonCrawlPageTimeoutMs: 240_000,
     /**
      * Retries on 429 / 5xx / network error, with exponential backoff. Common Crawl's
      * index server fails intermittently on wide prefix queries, so the ladder is long:

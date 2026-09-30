@@ -72,6 +72,8 @@ export async function commonCrawlBoardNames(hits: BoardHits): Promise<{
       try {
         const response = await fetchWithRetry(`${cdxApi}?${CC_QUERY}&page=${page}`, {
           passThroughStatuses: [404],
+          extraRetryStatuses: [400],
+          timeoutMs: config.discovery.commonCrawlPageTimeoutMs,
         });
         pagesQueried += 1;
         if (response.status === 404) continue;
@@ -107,6 +109,9 @@ export async function waybackBoardNames(hits: BoardHits): Promise<{
   const failures: string[] = [];
   let pagesQueried = 0;
   let resumeKey: string | null = null;
+  // Declared outside the loop so the check after it distinguishes "walked every page"
+  // from "ran out of page budget with more to fetch".
+  let nextResumeKey: string | null = null;
 
   for (let page = 0; page < config.discovery.maxWaybackPages; page++) {
     const params = new URLSearchParams({
@@ -132,13 +137,17 @@ export async function waybackBoardNames(hits: BoardHits): Promise<{
       pagesQueried += 1;
     } catch (error) {
       failures.push(`wayback page ${page}: ${errText(error)}`);
+      nextResumeKey = null;
       break;
     }
 
-    if (rows.length <= 1) break; // Header row only.
+    if (rows.length <= 1) {
+      nextResumeKey = null;
+      break; // Header row only.
+    }
 
     // With showResumeKey the response ends with a blank row then [resumeKey].
-    let nextResumeKey: string | null = null;
+    nextResumeKey = null;
     const last = rows.at(-1);
     const secondLast = rows.at(-2);
     if (last?.length === 1 && secondLast?.length === 0) {
@@ -158,7 +167,7 @@ export async function waybackBoardNames(hits: BoardHits): Promise<{
     resumeKey = nextResumeKey;
   }
 
-  if (resumeKey) {
+  if (nextResumeKey) {
     failures.push(`wayback: stopped at the ${config.discovery.maxWaybackPages}-page cap`);
   }
 

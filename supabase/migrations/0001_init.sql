@@ -141,3 +141,8 @@ alter table snapshots     enable row level security;
 alter table triggers      enable row level security;
 alter table runs          enable row level security;
 alter table discovery_log enable row level security;
+
+-- Note: the six "RLS enabled, no policy" advisories this raises are intentional.
+-- Every writer uses the service-role key, which bypasses RLS. Denying anon and
+-- authenticated outright is the correct posture until phase 5 adds a read-only role
+-- with explicit policies.

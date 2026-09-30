@@ -56,6 +56,25 @@ const ALLOWED_CHARS = /^[A-Za-z0-9][A-Za-z0-9._~ -]*$/;
 
 const MAX_LENGTH = 80;
 
+/**
+ * Shapes that prove a path segment was never a company name. All three were confirmed
+ * 404 against the posting API, and unlike a plain name they cannot be a real board.
+ *
+ * Note the deliberate limit: a 404 on its own is NOT evidence of junk. "Stanza" and
+ * "DECA Dental Group" are ordinary names that also 404, because they are former Ashby
+ * customers whose boards are gone. That is normal attrition and phase 2's job to record
+ * as not_found. Only structural impossibility belongs here.
+ */
+const STRUCTURAL_JUNK: RegExp[] = [
+  // root.<uuid> and root.<uuid>.<uuid>. An artefact of the embedded job board widget:
+  // 2,059 of the first 7,792 names discovered were this one shape.
+  /^root\./i,
+  // jobs-page-<uuid>, from paginated board listings.
+  /^jobs-page-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+  // A UUID with underscores for separators, anywhere in the segment.
+  /[0-9a-f]{8}_[0-9a-f]{4}_[0-9a-f]{4}_[0-9a-f]{4}_[0-9a-f]{12}/i,
+];
+
 export function extractBoardName(rawUrl: string): string | null {
   let url: URL;
   try {
@@ -89,6 +108,8 @@ export function extractBoardName(rawUrl: string): string | null {
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(decoded)) {
     return null;
   }
+
+  if (STRUCTURAL_JUNK.some((pattern) => pattern.test(decoded))) return null;
 
   return decoded;
 }

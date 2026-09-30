@@ -14,6 +14,11 @@ type FetchOptions = {
   retryBaseDelayMs?: number;
   /** Statuses returned to the caller instead of retried. 404 for the Ashby API. */
   passThroughStatuses?: number[];
+  /**
+   * Extra statuses to treat as retryable on top of 429 and 5xx. Common Crawl's index
+   * server returns an intermittent 400 for a page it serves fine on a later attempt.
+   */
+  extraRetryStatuses?: number[];
 };
 
 /**
@@ -29,6 +34,7 @@ export async function fetchWithRetry(
     maxRetries = config.discovery.maxRetries,
     retryBaseDelayMs = config.discovery.retryBaseDelayMs,
     passThroughStatuses = [],
+    extraRetryStatuses = [],
   } = options;
 
   let lastError: unknown;
@@ -50,7 +56,10 @@ export async function fetchWithRetry(
         return response;
       }
 
-      const retryable = response.status === 429 || response.status >= 500;
+      const retryable =
+        response.status === 429 ||
+        response.status >= 500 ||
+        extraRetryStatuses.includes(response.status);
       if (!retryable) throw new HttpError(response.status, url);
 
       const retryAfter = Number(response.headers.get('retry-after'));
