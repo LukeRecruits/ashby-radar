@@ -95,12 +95,15 @@ export const config = {
     },
     longOpen: {
       /**
-       * A role this old that is still open. Note this is the loudest rule by a
-       * long way: on the first evaluation about three quarters of active boards
-       * qualify, because most companies have something stale. Raise the age or
-       * add a floor under staleRoles if the weekly digest is all long_open.
+       * A role this old that is still open.
+       *
+       * The build pack specced 60 days. On the first evaluation over the full
+       * 4,167 active boards that fired for 3,217 of them, 77%, which is a
+       * directory rather than a prospect list: almost every company has
+       * something stale, so the signal carried no information. Raised to 120 on
+       * 2026-09-30. Lower it again only alongside a floor under staleRoles.
        */
-      minAgeDays: 60,
+      minAgeDays: 120,
       maxEvidenceJobs: 5,
     },
     publishesComp: {

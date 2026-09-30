@@ -113,7 +113,7 @@ be thousands of round trips a day. Every threshold is a function parameter passe
 | `hiring_spike` | Open roles up 5 or more on 30 days ago |
 | `first_recruiter` | A recruiting hire appears where there was none in the previous 90 days |
 | `sweet_spot` | Open roles enter the 5-50 band from outside it |
-| `long_open` | A role published 60+ days ago is still open |
+| `long_open` | A role published 120+ days ago is still open |
 | `publishes_comp` | Pay is shown on a job for the first time |
 
 ### Warm-up, and why silence is not a bug
@@ -133,10 +133,11 @@ they start firing the day the data supports them:
   starts.
 
 `long_open` is the exception. It reads `publishedAt` from Ashby rather than from our
-own history, so it is true from day one. That also makes it by far the loudest rule:
-on the first evaluation roughly three quarters of active boards qualify, because most
-companies have something stale. If the weekly digest is nothing but `long_open`, raise
-`minAgeDays` in `src/config.ts`.
+own history, so it is true from day one. That also makes it by far the loudest rule.
+At the 60 days the build pack specced, the first evaluation fired it for 3,217 of the
+4,167 active boards: 77%, which is a directory rather than a prospect list, because
+almost every company has something stale. `minAgeDays` is now 120. If it ever goes back
+down, put a floor under `staleRoles` at the same time.
 
 ### The backfill marker
 
