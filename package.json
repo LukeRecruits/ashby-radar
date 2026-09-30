@@ -1,0 +1,20 @@
+{
+  "name": "ashby-radar",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Finds companies using Ashby, reads their open jobs daily, and flags hiring signals.",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "discovery": "tsx src/discovery/run.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.58.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.2"
+  }
+}
