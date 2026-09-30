@@ -1,0 +1,42 @@
+name: refresh
+
+on:
+  schedule:
+    # Daily, 05:00 UTC. Two hours after the weekly discovery sweep starts, so a new
+    # board name discovered on Sunday is verified the same morning.
+    - cron: '0 5 * * *'
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: 'Check at most this many companies (0 = all). For smoke tests.'
+        required: false
+        default: '0'
+
+concurrency:
+  group: refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    # Paced by Ashby's 1-request-per-second limit, so the floor is roughly one minute
+    # per 55 companies. 5,731 companies is about 1h50m. Headroom for growth and retries.
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - name: Run refresh
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RADAR_REFRESH_LIMIT: ${{ inputs.limit || '0' }}
+        run: npm run refresh

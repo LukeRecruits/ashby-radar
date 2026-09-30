@@ -29,19 +29,19 @@ Three scheduled GitHub Actions workflows do all the work. Supabase holds all sta
 | `refresh` | Daily, 05:00 UTC | Calls the posting API for every company, writes jobs and a daily snapshot |
 | `triggers` | Daily, after refresh | Evaluates the six trigger rules, sends the digest, pushes to Clay |
 
-Only `discovery` exists today. See Build status.
+`discovery` and `refresh` exist today. See Build status.
 
 ## Build status
 
 - [x] Phase 1: foundations and discovery
-- [ ] Phase 2: verify and daily refresh
+- [x] Phase 2: verify and daily refresh
 - [ ] Phase 3: triggers and hand-off
 - [ ] Phase 4: coverage and benchmark
 - [ ] Phase 5: public hiring snapshot page (stretch)
 
 ## What the live sources actually do
 
-Four things the public sources do that their docs do not say, each of which the code now
+Nine things the public sources do that their docs do not say, each of which the code now
 accounts for. Worth reading before changing discovery or the refresh.
 
 1. **The posting API is case-insensitive on board names.** `/Linear`, `/linear` and
@@ -57,9 +57,31 @@ accounts for. Worth reading before changing discovery or the refresh.
    and returns an intermittent 400. Requests use `pageSize=1`, a seven-step backoff
    ladder, and retry on 400.
 
+5. **The posting API echoes your spelling back in every `jobUrl`.** `GET /openai`
+   returns 833 jobs with URLs under `/openai`; `GET /OpenAI` returns the same 833 jobs
+   with URLs under `/OpenAI`. The response holds no authoritative spelling anywhere, so
+   the job URL is not a stable identity. Jobs are keyed on the Ashby job id instead, a
+   UUID that cannot drift when a board's stored spelling is corrected. See migration
+   0004.
+6. **An empty board is a 200, not a 404.** Deel and Mercury are both live Ashby
+   customers with nothing published today. `active` with zero open roles is an ordinary
+   state, and the refresh writes a zero snapshot for it.
+7. **There is no company name in the response at all.** The only two top-level keys are
+   `jobs` and `apiVersion`, and no job field carries one. `display_name` therefore
+   cannot be filled from the board and stays null until phase 4's careers-page scan
+   supplies a real name from the company's own site. Board names are not names:
+   `the job sauce` and `LIV-Golf` are what Ashby has.
+8. **`isListed` is true on every job the API returns.** Unlisted jobs are absent rather
+   than flagged, so `open_role_count` is simply the length of the array.
+9. **With `includeCompensation=true` every job carries a `compensation` object**,
+   populated or empty. Empty means the company does not publish pay on that job, and it
+   agrees with `shouldDisplayCompensationOnJobPostings` exactly: 672 of OpenAI's 833.
+
 A 404 is not evidence of junk. `Stanza` and `DECA Dental Group` are ordinary names that
-404 because they are former Ashby customers. That is attrition, recorded as `not_found`.
-Only structurally impossible shapes are filtered out.
+404 because they are former Ashby customers. That is attrition, and the refresh records
+it two ways: a name we never saw live becomes `not_found`, a company we have seen live
+before becomes `inactive`. A failed check is neither. Its status is left untouched so a
+network error can never be mistaken for a company leaving Ashby.
 
 ## Data model
 
@@ -68,7 +90,7 @@ Six tables, defined in `supabase/migrations/`.
 | Table | Holds |
 | --- | --- |
 | `companies` | One row per board name. Unique on `(source, board_name)`. `source` leaves the door open for other ATSs later |
-| `jobs` | One row per job URL. Unique on `ashby_job_url`. Jobs are closed, never deleted |
+| `jobs` | One row per Ashby job id. Unique on `ashby_job_id`, which is why the daily diff cannot drift. Jobs are closed, never deleted |
 | `snapshots` | One row per company per day. The basis for every trigger |
 | `triggers` | One row per company per type per 30 days, with evidence |
 | `runs` | One row per workflow run, for health checks |
@@ -81,7 +103,13 @@ Nothing is ever hard-deleted. Jobs get a `closed_at`, companies get an `inactive
 There is no local development environment. Every change is committed and pushed, then
 verified on the deployed output: the Actions run log, and the Supabase tables.
 
-To run discovery by hand: Actions tab, `discovery`, Run workflow.
+To run either workflow by hand: Actions tab, pick `discovery` or `refresh`, Run workflow.
+
+The refresh is safe to run twice in a day. A company whose `last_checked_at` already
+falls inside the current run date is skipped, so a rerun after a failure resumes where
+the last one stopped and snapshots can never double up. Ashby is paced by a single
+shared rate limiter rather than by the loop, so database writes for one company overlap
+the next company's request while Ashby still sees one request per second.
 
 ## Rules for talking to Ashby
 

@@ -31,6 +31,40 @@ export const config = {
     upsertBatchSize: 500,
   },
 
+  refresh: {
+    /**
+     * Companies in flight at once. Ashby is paced by the shared rate limiter, not by
+     * this, so raising it overlaps more Supabase writes with the same 1 request/second
+     * and does not touch Ashby any harder. At 1 it would run a full second idle between
+     * every board while waiting on the database.
+     */
+    concurrency: 6,
+    /** Rows pulled per page when listing companies to check. */
+    companyPageSize: 1_000,
+    /** How long a not_found company waits before we try it again. */
+    notFoundRecheckDays: 7,
+    /** Rows per jobs upsert batch. Big boards exist: OpenAI returns 833 jobs. */
+    jobUpsertBatchSize: 500,
+    /** Per-company request timeout. Board responses can be a megabyte or more. */
+    requestTimeoutMs: 60_000,
+    /** Retries on 429 / 5xx per board. Shorter ladder than discovery: 2s, 4s, 8s. */
+    maxRetries: 3,
+    retryBaseDelayMs: 2_000,
+    /**
+     * Counts as a recruiting hire for recruiter_role_count and the first_recruiter
+     * trigger. \bTA\b is anchored deliberately: an unanchored "ta" matches Data,
+     * Staff, Retail and most of the job market.
+     */
+    recruiterTitlePatterns: [
+      'recruit',
+      'talent',
+      '\\bTA\\b',
+      'people partner',
+    ] as string[],
+    /** Failure strings kept in the run notes. The rest are counted only. */
+    maxLoggedFailures: 200,
+  },
+
   ashby: {
     postingApiBase: 'https://api.ashbyhq.com/posting-api/job-board',
     /** Hard limit from the project rules: max 1 request per second. */

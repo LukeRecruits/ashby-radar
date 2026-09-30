@@ -4,9 +4,12 @@
   "private": true,
   "description": "Finds companies using Ashby, reads their open jobs daily, and flags hiring signals.",
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "discovery": "tsx src/discovery/run.ts",
+    "refresh": "tsx src/refresh/run.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
