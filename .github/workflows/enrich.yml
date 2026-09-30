@@ -1,0 +1,55 @@
+name: enrich
+
+on:
+  schedule:
+    # Weekly, Sunday 06:30 UTC. After the Sunday discovery sweep (03:00) and the daily
+    # refresh (05:00), so a board found this morning is named the same day.
+    - cron: '30 6 * * 0'
+  workflow_dispatch:
+    inputs:
+      only:
+        description: 'Which pass to run'
+        type: choice
+        required: false
+        default: 'all'
+        options: ['all', 'names', 'domains']
+      nameLimit:
+        description: 'Cap companies named this run (0 = config default). For smoke tests.'
+        required: false
+        default: '0'
+      domainLimit:
+        description: 'Cap companies domain-checked this run (0 = config default).'
+        required: false
+        default: '0'
+
+concurrency:
+  group: enrich
+  cancel-in-progress: false
+
+jobs:
+  enrich:
+    runs-on: ubuntu-latest
+    # Naming is paced at one request per second against Ashby, so a full first pass over
+    # 4,167 boards is about 80 minutes. Domain verification hits thousands of different
+    # hosts instead, so it runs 20-wide and takes minutes.
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - name: Enrich
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RADAR_ENRICH_ONLY: ${{ inputs.only }}
+          RADAR_ENRICH_NAME_LIMIT: ${{ inputs.nameLimit || '0' }}
+          RADAR_ENRICH_DOMAIN_LIMIT: ${{ inputs.domainLimit || '0' }}
+        run: npm run enrich

@@ -65,6 +65,49 @@ export const config = {
     maxLoggedFailures: 200,
   },
 
+  enrich: {
+    /**
+     * Company name comes from the board page, once per company rather than daily.
+     * jobs.ashbyhq.com is Ashby's infrastructure like the API is, so it gets the same
+     * one-request-per-second budget and its own limiter.
+     */
+    boardPageDelayMs: 1_100,
+    boardPageTimeoutMs: 30_000,
+    /** Only the <head> is wanted. The board is a JS app and the body is a megabyte. */
+    boardPageReadBytes: 60_000,
+    maxRetries: 2,
+    retryBaseDelayMs: 2_000,
+
+    /**
+     * Minimum name-match score to accept a domain read out of job adverts. The whole
+     * safety margin lives here: below it we refuse and let the verifier try, because a
+     * wrong domain poisons every downstream lookup and a refusal costs nothing.
+     */
+    minDomainScore: 80,
+    /** Minimum score before a guessed domain is even worth fetching. */
+    minGuessScore: 60,
+    /** Tried in this order. Covers the overwhelming majority of company websites. */
+    guessTlds: ['com', 'io', 'ai', 'co', 'app', 'dev'] as readonly string[],
+    careersPaths: ['/careers', '/jobs', '/careers/', '/company/careers', '/about/careers'] as readonly string[],
+    /** Hard ceiling on fetches per company so one slow site cannot eat the run. */
+    maxFetchesPerCompany: 8,
+    siteTimeoutMs: 10_000,
+    siteReadBytes: 400_000,
+    /** Politeness gap between two fetches of the same host. */
+    perHostDelayMs: 1_000,
+    /**
+     * Companies verified in parallel. These are thousands of different hosts, not one,
+     * so the Ashby rate limit does not apply and the run is minutes rather than hours.
+     */
+    verifyConcurrency: 20,
+
+    /** Safety valve per run, so a first pass can be proved small before going wide. */
+    maxNamesPerRun: 6_000,
+    maxVerifiesPerRun: 3_000,
+    companyPageSize: 1_000,
+    updateBatchSize: 200,
+  },
+
   triggers: {
     /** One trigger per company per type per this many days. */
     dedupeDays: 30,

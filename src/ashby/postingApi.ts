@@ -26,6 +26,15 @@
  */
 
 import { config } from '../config.ts';
+import {
+  candidatesFromDescriptions,
+  type DomainCandidate,
+} from '../enrich/domainGuess.ts';
+import {
+  normaliseAddress,
+  type NormalisedAddress,
+  type RawAddress,
+} from '../enrich/location.ts';
 import { fetchWithRetry, HttpError } from '../lib/http.ts';
 
 type CompensationComponent = {
@@ -45,6 +54,8 @@ type RawCompensation = {
 
 type RawJob = {
   id?: string;
+  address?: RawAddress;
+  descriptionHtml?: string | null;
   title?: string | null;
   department?: string | null;
   team?: string | null;
@@ -55,6 +66,7 @@ type RawJob = {
   isListed?: boolean | null;
   publishedAt?: string | null;
   jobUrl?: string | null;
+  secondaryLocations?: unknown[] | null;
   shouldDisplayCompensationOnJobPostings?: boolean | null;
   compensation?: RawCompensation | null;
 };
@@ -72,10 +84,21 @@ export type BoardJob = {
   isListed: boolean | null;
   publishedAt: string | null;
   hasCompensation: boolean;
+  /** Structured address, normalised. Present on most jobs, never on all. */
+  address: NormalisedAddress;
 };
 
 export type BoardResult =
-  | { found: true; jobs: BoardJob[] }
+  | {
+      found: true;
+      jobs: BoardJob[];
+      /**
+       * Company domains linked from the board's own job adverts, most-linked first.
+       * The descriptions themselves are read and thrown away: only the hostname is
+       * kept, so the "no job descriptions stored" rule still holds.
+       */
+      domainCandidates: DomainCandidate[];
+    }
   | { found: false };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -117,6 +140,7 @@ function normalise(raw: RawJob, boardName: string): BoardJob | null {
     isListed: typeof raw.isListed === 'boolean' ? raw.isListed : null,
     publishedAt: isoOrNull(raw.publishedAt),
     hasCompensation: publishesCompensation(raw),
+    address: normaliseAddress(raw.address),
   };
 }
 
@@ -145,6 +169,7 @@ export async function fetchBoard(boardName: string): Promise<BoardResult> {
   }
 
   const jobs: BoardJob[] = [];
+  const descriptions: string[] = [];
   const seen = new Set<string>();
   for (const raw of body.jobs as RawJob[]) {
     const job = normalise(raw, boardName);
@@ -153,9 +178,10 @@ export async function fetchBoard(boardName: string): Promise<BoardResult> {
     if (!job || seen.has(job.ashbyJobId)) continue;
     seen.add(job.ashbyJobId);
     jobs.push(job);
+    if (raw.descriptionHtml) descriptions.push(raw.descriptionHtml);
   }
 
-  return { found: true, jobs };
+  return { found: true, jobs, domainCandidates: candidatesFromDescriptions(descriptions) };
 }
 
 let recruiterPattern: RegExp | null = null;

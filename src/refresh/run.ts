@@ -13,6 +13,8 @@
 
 import { fetchBoard, isRecruiterRole, type BoardJob } from '../ashby/postingApi.ts';
 import { config } from '../config.ts';
+import { pickDomain, type DomainCandidate } from '../enrich/domainGuess.ts';
+import { companyLocation } from '../enrich/location.ts';
 import { log } from '../lib/log.ts';
 import { chunk, fetchAllPages } from '../lib/paginate.ts';
 import { createRateLimiter } from '../lib/rateLimiter.ts';
@@ -21,7 +23,13 @@ import { supabase } from '../lib/supabase.ts';
 
 const WORKFLOW = 'refresh';
 
-type Company = { id: string; board_name: string; status: string };
+type Company = {
+  id: string;
+  board_name: string;
+  status: string;
+  display_name: string | null;
+  domain: string | null;
+};
 
 type Outcome =
   | 'active'
@@ -58,7 +66,7 @@ async function companiesDue(runStart: Date): Promise<Company[]> {
   const live = await fetchAllPages<Company>('companies', size, (from, to) =>
     db
       .from('companies')
-      .select('id, board_name, status')
+      .select('id, board_name, status, display_name, domain')
       .in('status', ['unverified', 'active', 'inactive'])
       .or(notCheckedToday)
       .order('id')
@@ -68,7 +76,7 @@ async function companiesDue(runStart: Date): Promise<Company[]> {
   const missing = await fetchAllPages<Company>('companies', size, (from, to) =>
     db
       .from('companies')
-      .select('id, board_name, status')
+      .select('id, board_name, status, display_name, domain')
       .eq('status', 'not_found')
       .or(`last_checked_at.is.null,last_checked_at.lt.${recheckCutoff}`)
       .order('id')
@@ -136,6 +144,9 @@ async function writeJobs(
         is_listed: job.isListed,
         published_at: job.publishedAt,
         has_compensation: job.hasCompensation,
+        address_country: job.address.country,
+        address_region: job.address.region,
+        address_locality: job.address.locality,
         last_seen_at: now,
         // A job that returns to the board reopens. first_seen_at is left out of the
         // payload on purpose so the original sighting survives the update.
@@ -186,6 +197,41 @@ async function updateCompany(
   if (error) throw new Error(`company update failed: ${error.message}`);
 }
 
+/**
+ * Everything we can learn about the company itself from the board we just read:
+ * where it hires, and its own domain if its adverts link to it.
+ *
+ * Domain is only ever written, never overwritten. A domain proved by the verifier or
+ * corrected by hand outranks anything inferred from advert links, and this pass has no
+ * way to tell which it is looking at.
+ */
+function leadFields(
+  company: Company,
+  jobs: BoardJob[],
+  candidates: DomainCandidate[],
+  now: string,
+): Record<string, unknown> {
+  const where = companyLocation(jobs);
+  const patch: Record<string, unknown> = {
+    top_country: where.country,
+    top_locality: where.locality,
+    remote_share: where.remoteShare,
+    domain_candidates: candidates,
+  };
+
+  if (!company.domain) {
+    const picked = pickDomain(candidates, company.display_name, config.enrich.minDomainScore);
+    if (picked) {
+      patch.domain = picked.domain;
+      patch.domain_confidence = picked.confidence;
+      patch.domain_source = 'job_description';
+      patch.domain_checked_at = now;
+    }
+  }
+
+  return patch;
+}
+
 async function checkCompany(
   company: Company,
   snapshotDate: string,
@@ -219,6 +265,7 @@ async function checkCompany(
     status: 'active',
     last_checked_at: now,
     last_active_at: now,
+    ...leadFields(company, board.jobs, board.domainCandidates, now),
   });
 
   return {

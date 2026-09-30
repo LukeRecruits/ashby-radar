@@ -10,6 +10,7 @@
   "scripts": {
     "discovery": "tsx src/discovery/run.ts",
     "refresh": "tsx src/refresh/run.ts",
+    "enrich": "tsx src/enrich/run.ts",
     "triggers": "tsx src/triggers/run.ts",
     "clay": "tsx src/handoff/clay.ts",
     "digest": "tsx src/digest/run.ts",
