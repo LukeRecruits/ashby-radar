@@ -65,6 +65,80 @@ export const config = {
     maxLoggedFailures: 200,
   },
 
+  triggers: {
+    /** One trigger per company per type per this many days. */
+    dedupeDays: 30,
+    /** Rows per triggers insert batch. */
+    insertBatchSize: 500,
+    /**
+     * The comparison rules look for the latest snapshot at or before
+     * `lookbackDays` ago. `baselineWindowDays` is how far further back they will
+     * reach for it, so a missed morning run degrades the comparison rather than
+     * silencing the rule for a day.
+     */
+    hiringSpike: {
+      lookbackDays: 30,
+      baselineWindowDays: 7,
+      minIncrease: 5,
+      maxEvidenceJobs: 10,
+    },
+    sweetSpot: {
+      lookbackDays: 30,
+      baselineWindowDays: 7,
+      /** The band CandidHQ sells into. Also used to order the digest. */
+      minRoles: 5,
+      maxRoles: 50,
+    },
+    firstRecruiter: {
+      lookbackDays: 90,
+      maxEvidenceJobs: 5,
+    },
+    longOpen: {
+      /**
+       * A role this old that is still open. Note this is the loudest rule by a
+       * long way: on the first evaluation about three quarters of active boards
+       * qualify, because most companies have something stale. Raise the age or
+       * add a floor under staleRoles if the weekly digest is all long_open.
+       */
+      minAgeDays: 60,
+      maxEvidenceJobs: 5,
+    },
+    publishesComp: {
+      maxEvidenceJobs: 5,
+    },
+  },
+
+  digest: {
+    /** Triggers shown per type before the entry collapses to "and N more". */
+    maxPerType: 15,
+    /** Used the first time only, before a digest has ever been sent. */
+    firstRunWindowDays: 7,
+    requestTimeoutMs: 15_000,
+  },
+
+  clay: {
+    /**
+     * Triggers pushed per run. The backlog from the first evaluation is in the
+     * thousands, and nothing is lost by draining it over several days: anything
+     * unexported is picked up by the next run.
+     */
+    maxPerRun: 500,
+    /** Clay's table webhook takes one row per request. Be polite about it. */
+    requestDelayMs: 300,
+    requestTimeoutMs: 20_000,
+    maxRetries: 3,
+    retryBaseDelayMs: 2_000,
+    /** Rows per exported_at update batch. */
+    markBatchSize: 500,
+  },
+
+  exports: {
+    /** Written here, then uploaded as workflow artifacts. */
+    outputDir: 'out',
+    /** Rows pulled per page when walking a table for a CSV. */
+    pageSize: 1_000,
+  },
+
   ashby: {
     postingApiBase: 'https://api.ashbyhq.com/posting-api/job-board',
     /** Hard limit from the project rules: max 1 request per second. */

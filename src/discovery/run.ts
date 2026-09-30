@@ -1,17 +1,12 @@
 import { config } from '../config.ts';
 import { log } from '../lib/log.ts';
+import { chunk } from '../lib/paginate.ts';
 import { finishRun, startRun } from '../lib/runs.ts';
 import { supabase } from '../lib/supabase.ts';
 import { collapseCaseVariants } from './boardName.ts';
 import { commonCrawlBoardNames, waybackBoardNames, type BoardHits } from './cdx.ts';
 
 const WORKFLOW = 'discovery';
-
-function chunk<T>(items: T[], size: number): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
-  return out;
-}
 
 /**
  * Upserts names into companies. Existing rows keep their status and their original

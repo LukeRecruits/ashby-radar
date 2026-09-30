@@ -1,0 +1,48 @@
+name: export
+
+on:
+  workflow_dispatch:
+    inputs:
+      from:
+        description: 'Triggers fired on or after this date (YYYY-MM-DD). Blank = 30 days ago'
+        required: false
+        default: ''
+      to:
+        description: 'Triggers fired on or before this date (YYYY-MM-DD). Blank = today'
+        required: false
+        default: ''
+
+concurrency:
+  group: export
+  cancel-in-progress: true
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - name: Write the CSVs
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RADAR_EXPORT_FROM: ${{ inputs.from }}
+          RADAR_EXPORT_TO: ${{ inputs.to }}
+        run: npm run export
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ashby-radar-csv
+          path: out/*.csv
+          if-no-files-found: error
+          retention-days: 30

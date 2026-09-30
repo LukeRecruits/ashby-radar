@@ -1,0 +1,69 @@
+name: triggers
+
+on:
+  schedule:
+    # Daily, 07:15 UTC. The refresh starts at 05:00 and takes about 1h50m over the full
+    # list, so this leaves it roughly 25 minutes of headroom to finish first. Triggers
+    # read the snapshots the refresh writes, so the order matters more than the hour.
+    - cron: '15 7 * * *'
+  workflow_dispatch:
+    inputs:
+      digest:
+        description: 'Send the Slack digest on this run, whatever day it is'
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  group: triggers
+  cancel-in-progress: false
+
+jobs:
+  triggers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - name: Evaluate triggers
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: npm run triggers
+
+      # Both hand-offs run even when a rule failed above, so the signals that did fire
+      # still reach Luke. The run is already marked failed, which is what surfaces it.
+      - name: Push to Clay
+        if: ${{ !cancelled() }}
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          CLAY_WEBHOOK_URL: ${{ secrets.CLAY_WEBHOOK_URL }}
+        run: npm run clay
+
+      - name: Is the digest due
+        if: ${{ !cancelled() }}
+        id: due
+        run: |
+          if [ "${{ inputs.digest }}" = "true" ] || [ "$(date -u +%u)" = "1" ]; then
+            echo "send=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "send=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Send the weekly Slack digest
+        if: ${{ !cancelled() && steps.due.outputs.send == 'true' }}
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: npm run digest

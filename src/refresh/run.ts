@@ -14,8 +14,9 @@
 import { fetchBoard, isRecruiterRole, type BoardJob } from '../ashby/postingApi.ts';
 import { config } from '../config.ts';
 import { log } from '../lib/log.ts';
-import { finishRun, startRun } from '../lib/runs.ts';
+import { chunk, fetchAllPages } from '../lib/paginate.ts';
 import { createRateLimiter } from '../lib/rateLimiter.ts';
+import { finishRun, startRun } from '../lib/runs.ts';
 import { supabase } from '../lib/supabase.ts';
 
 const WORKFLOW = 'refresh';
@@ -30,12 +31,6 @@ type Outcome =
   | 'still_missing'
   | 'failed';
 
-function chunk<T>(items: T[], size: number): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
-  return out;
-}
-
 /** Midnight UTC of the run's date. The whole run uses one date, even across midnight. */
 function startOfRunDate(now: Date): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
@@ -43,21 +38,6 @@ function startOfRunDate(now: Date): Date {
 
 function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
-}
-
-type PageResult = PromiseLike<{ data: unknown; error: { message: string } | null }>;
-
-/** Walks a filtered companies query page by page. PostgREST caps a single page. */
-async function page(fetchPage: (from: number, to: number) => PageResult): Promise<Company[]> {
-  const rows: Company[] = [];
-  const size = config.refresh.companyPageSize;
-  for (let from = 0; ; from += size) {
-    const { data, error } = await fetchPage(from, from + size - 1);
-    if (error) throw new Error(`companies query failed: ${error.message}`);
-    const batch = (data ?? []) as Company[];
-    rows.push(...batch);
-    if (batch.length < size) return rows;
-  }
 }
 
 /**
@@ -73,7 +53,9 @@ async function companiesDue(runStart: Date): Promise<Company[]> {
     runStart.getTime() - config.refresh.notFoundRecheckDays * 86_400_000,
   ).toISOString();
 
-  const live = await page((from, to) =>
+  const size = config.refresh.companyPageSize;
+
+  const live = await fetchAllPages<Company>('companies', size, (from, to) =>
     db
       .from('companies')
       .select('id, board_name, status')
@@ -83,7 +65,7 @@ async function companiesDue(runStart: Date): Promise<Company[]> {
       .range(from, to),
   );
 
-  const missing = await page((from, to) =>
+  const missing = await fetchAllPages<Company>('companies', size, (from, to) =>
     db
       .from('companies')
       .select('id, board_name, status')
