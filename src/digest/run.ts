@@ -121,10 +121,6 @@ async function send(webhook: string, payload: unknown): Promise<void> {
 
 async function main(): Promise<void> {
   const webhook = process.env.SLACK_WEBHOOK_URL?.trim();
-  if (!webhook) {
-    log.warn('SLACK_WEBHOOK_URL is not set, no digest sent');
-    return;
-  }
 
   const runId = await startRun(WORKFLOW);
   try {
@@ -138,7 +134,7 @@ async function main(): Promise<void> {
 
     if (!rows.length) {
       // Still move the marker on. An empty week is not a week to replay next time.
-      await setSetting(SETTINGS.lastDigestSentAt, until);
+      if (webhook) await setSetting(SETTINGS.lastDigestSentAt, until);
       await finishRun(runId, {
         checked: 0,
         succeeded: 0,
@@ -149,11 +145,28 @@ async function main(): Promise<void> {
       return;
     }
 
-    await send(webhook, buildMessage(rows, since, until));
-    await setSetting(SETTINGS.lastDigestSentAt, until);
-
+    const message = buildMessage(rows, since, until);
     const byType: Record<string, number> = {};
     for (const row of rows) byType[row.type] = (byType[row.type] ?? 0) + 1;
+
+    // No webhook yet. Render the digest into the run log anyway and leave the marker
+    // alone, so the week is still waiting when the secret arrives. With no local
+    // development environment this log is the only way to see a digest before it
+    // lands in Luke's Slack.
+    if (!webhook) {
+      log.warn('SLACK_WEBHOOK_URL is not set, digest rendered but not sent');
+      console.log(JSON.stringify(message, null, 2));
+      await finishRun(runId, {
+        checked: rows.length,
+        succeeded: 0,
+        failed: 0,
+        notes: JSON.stringify({ since, until, sent: false, reason: 'no webhook', byType }, null, 2),
+      });
+      return;
+    }
+
+    await send(webhook, message);
+    await setSetting(SETTINGS.lastDigestSentAt, until);
 
     await finishRun(runId, {
       checked: rows.length,

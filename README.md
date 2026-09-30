@@ -201,7 +201,7 @@ All secrets live in GitHub Actions secrets. `.env.example` lists every one.
 | --- | --- |
 | `SUPABASE_URL` | every workflow |
 | `SUPABASE_SERVICE_ROLE_KEY` | every workflow |
-| `SLACK_WEBHOOK_URL` | the weekly digest. Without it the digest logs a warning and sends nothing |
+| `SLACK_WEBHOOK_URL` | the weekly digest. Without it the digest is rendered into the run log and the week is left unsent, so nothing is lost when the secret arrives |
 | `CLAY_WEBHOOK_URL` | the Clay hand-off. Without it nothing is pushed and nothing is marked exported |
 
 The service-role key never leaves GitHub Actions and server-side env vars.
