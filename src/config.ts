@@ -106,6 +106,12 @@ export const config = {
     maxVerifiesPerRun: 3_000,
     companyPageSize: 1_000,
     updateBatchSize: 200,
+    /**
+     * Write results out every this many rows rather than once at the end. A full
+     * naming pass runs about 75 minutes; flushing as it goes means a failure at
+     * minute 74 keeps everything already proved.
+     */
+    flushEvery: 200,
   },
 
   triggers: {

@@ -15,7 +15,8 @@
     "clay": "tsx src/handoff/clay.ts",
     "digest": "tsx src/digest/run.ts",
     "export": "tsx src/export/run.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "clay-companies": "tsx src/handoff/companies.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.58.0"

@@ -75,9 +75,9 @@ async function needingDomain(): Promise<Company[]> {
   );
 }
 
-async function applyUpdates(
-  rows: { id: string; patch: Record<string, unknown> }[],
-): Promise<void> {
+type Update = { id: string; patch: Record<string, unknown> };
+
+async function applyUpdates(rows: Update[]): Promise<void> {
   // PostgREST has no multi-row update with different values per row, so these go one
   // at a time, batched only to bound how many are in flight at once.
   for (const batch of chunk(rows, config.enrich.updateBatchSize)) {
@@ -88,6 +88,40 @@ async function applyUpdates(
       }),
     );
   }
+}
+
+/**
+ * Collects updates and writes them out every `flushEvery` rows.
+ *
+ * The first version of this held every update in memory and wrote once at the end. A
+ * full naming pass is about 75 minutes, so a failure at minute 74 threw away the lot
+ * and the next run started from nothing. Flushing as it goes means an interrupted run
+ * keeps everything it had already proved, and because neither pass overwrites, the
+ * next run simply picks up what is still missing.
+ */
+function writer(flushEvery: number) {
+  let pending: Update[] = [];
+  let written = 0;
+  return {
+    async add(update: Update): Promise<void> {
+      pending.push(update);
+      if (pending.length >= flushEvery) {
+        const batch = pending;
+        pending = [];
+        await applyUpdates(batch);
+        written += batch.length;
+        log.info('flushed', { written });
+      }
+    },
+    async flush(): Promise<number> {
+      if (pending.length) {
+        await applyUpdates(pending);
+        written += pending.length;
+        pending = [];
+      }
+      return written;
+    },
+  };
 }
 
 type NameTally = { named: number; noName: number; gone: number; failed: number };
@@ -103,7 +137,7 @@ async function nameCompanies(): Promise<NameTally> {
   log.info('naming companies', { needing: all.length, thisRun: due.length });
 
   const slot = createRateLimiter(config.enrich.boardPageDelayMs);
-  const updates: { id: string; patch: Record<string, unknown> }[] = [];
+  const out = writer(config.enrich.flushEvery);
   const tally: NameTally = { named: 0, noName: 0, gone: 0, failed: 0 };
   let cursor = 0;
 
@@ -119,16 +153,16 @@ async function nameCompanies(): Promise<NameTally> {
           // The board has gone since the last refresh. Leave status to the refresh,
           // which is the only thing allowed to decide that, but do not ask again.
           tally.gone += 1;
-          updates.push({ id: company.id, patch: { name_checked_at: now } });
+          await out.add({ id: company.id, patch: { name_checked_at: now } });
         } else if (page.name) {
           tally.named += 1;
-          updates.push({
+          await out.add({
             id: company.id,
             patch: { display_name: page.name, name_source: 'board_page', name_checked_at: now },
           });
         } else {
           tally.noName += 1;
-          updates.push({ id: company.id, patch: { name_checked_at: now } });
+          await out.add({ id: company.id, patch: { name_checked_at: now } });
         }
       } catch (error) {
         // No name_checked_at, so the next run tries again.
@@ -147,7 +181,7 @@ async function nameCompanies(): Promise<NameTally> {
   await Promise.all(
     Array.from({ length: Math.min(6, due.length || 1) }, worker),
   );
-  await applyUpdates(updates);
+  await out.flush();
   log.info('naming done', tally);
   return tally;
 }
@@ -164,7 +198,7 @@ async function resolveDomains(): Promise<DomainTally> {
   const due = all.slice(0, limitFrom('RADAR_ENRICH_DOMAIN_LIMIT', config.enrich.maxVerifiesPerRun));
   log.info('resolving domains', { needing: all.length, thisRun: due.length });
 
-  const updates: { id: string; patch: Record<string, unknown> }[] = [];
+  const out = writer(config.enrich.flushEvery);
   const tally: DomainTally = { fromAdverts: 0, backlink: 0, nameMatch: 0, unresolved: 0, failed: 0 };
   const toVerify: Company[] = [];
 
@@ -176,7 +210,7 @@ async function resolveDomains(): Promise<DomainTally> {
     );
     if (picked) {
       tally.fromAdverts += 1;
-      updates.push({
+      await out.add({
         id: company.id,
         patch: {
           domain: picked.domain,
@@ -203,7 +237,7 @@ async function resolveDomains(): Promise<DomainTally> {
         if (found) {
           if (found.source === 'careers_backlink') tally.backlink += 1;
           else tally.nameMatch += 1;
-          updates.push({
+          await out.add({
             id: company.id,
             patch: {
               domain: found.domain,
@@ -216,7 +250,7 @@ async function resolveDomains(): Promise<DomainTally> {
           // Checked and not found. Marked so the next run does not repeat the work;
           // these are the rows worth spending Clay credits on.
           tally.unresolved += 1;
-          updates.push({ id: company.id, patch: { domain_checked_at: now } });
+          await out.add({ id: company.id, patch: { domain_checked_at: now } });
         }
       } catch (error) {
         tally.failed += 1;
@@ -234,7 +268,7 @@ async function resolveDomains(): Promise<DomainTally> {
     Array.from({ length: Math.min(config.enrich.verifyConcurrency, toVerify.length || 1) }, worker),
   );
 
-  await applyUpdates(updates);
+  await out.flush();
   log.info('domains done', tally);
   return tally;
 }

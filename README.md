@@ -26,6 +26,7 @@ Three scheduled GitHub Actions workflows do all the work. Supabase holds all sta
 | Workflow | Schedule | Does |
 | --- | --- | --- |
 | `discovery` | Weekly, Sun 03:00 UTC | Mines Common Crawl and Wayback for new board names |
+| `enrich` | Weekly, Sun 06:30 UTC | Company names from board pages, then domain resolution |
 | `refresh` | Daily, 05:00 UTC | Calls the posting API for every company, writes jobs and a daily snapshot |
 | `triggers` | Daily, 07:15 UTC | Evaluates the six rules, pushes to Clay, sends the Monday digest |
 | `export` | Manual only | Writes companies.csv and triggers.csv as run artifacts |
@@ -95,6 +96,10 @@ Seven tables, defined in `supabase/migrations/`.
 | `runs` | One row per workflow run, for health checks |
 | `discovery_log` | Where each board name came from, for debugging coverage |
 | `settings` | Key/value state that is not about a company: the backfill marker and the last digest timestamp |
+
+`companies` carries the lead fields: `display_name`, `domain` with a `domain_confidence`
+and `domain_source`, `top_country` / `top_locality` / `remote_share` derived from where
+the open roles actually are, and `parked_at` for companies set aside by hand.
 
 Nothing is ever hard-deleted. Jobs get a `closed_at`, companies get an `inactive` status.
 
@@ -191,8 +196,20 @@ nothing new.
 
 ## Data rules
 
-Company and job data only. No personal data about anyone, ever. Job descriptions are not
-stored, only the fields in the schema.
+**Company and job data only. Radar never stores a person.**
+
+That is a decision, not a gap. Contacts matter for prospecting, and Clay holds them:
+Radar works out which companies are worth talking to and hands them over, Clay finds
+the person. Keeping people out of Radar means it never becomes a UK GDPR processing
+activity in its own right, and the personal data sits in the tool built for it.
+
+Putting contacts in Radar would first need a written legitimate interests assessment,
+an Article 14 notice (the data would come from Clay, not from the person), a retention
+period and a suppression list that survives deletion. None of that exists, so neither
+does a contacts table.
+
+Job descriptions are not stored either. The refresh reads them to extract the company's
+own domain and discards them; only the hostname is kept.
 
 ## Secrets
 

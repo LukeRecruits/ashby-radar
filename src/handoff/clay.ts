@@ -19,54 +19,9 @@ import { sleep } from '../lib/sleep.ts';
 import { supabase } from '../lib/supabase.ts';
 import { loadTriggers, triggerView } from '../triggers/read.ts';
 import { firstEvidenceUrl, summarise } from '../triggers/summary.ts';
+import { postToClay } from './post.ts';
 
 const WORKFLOW = 'clay';
-
-type ClayRow = {
-  trigger_id: string;
-  trigger_type: string;
-  fired_at: string;
-  company_name: string;
-  board_name: string;
-  board_url: string;
-  domain: string | null;
-  open_roles: number | null;
-  evidence_summary: string;
-  evidence_url: string | null;
-};
-
-/** Clay refused the row itself. Retrying sends the same rejected row again. */
-class ClayRejected extends Error {}
-
-async function post(webhook: string, row: ClayRow): Promise<void> {
-  let lastError: unknown;
-
-  for (let attempt = 0; attempt <= config.clay.maxRetries; attempt++) {
-    if (attempt > 0) {
-      await sleep(config.clay.retryBaseDelayMs * 2 ** (attempt - 1));
-    }
-    try {
-      const response = await fetch(webhook, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'user-agent': config.userAgent },
-        body: JSON.stringify(row),
-        signal: AbortSignal.timeout(config.clay.requestTimeoutMs),
-      });
-      if (response.ok) return;
-
-      // Only rate limits and server faults are worth trying again.
-      if (response.status !== 429 && response.status < 500) {
-        throw new ClayRejected(`Clay returned ${response.status}: ${await response.text()}`);
-      }
-      lastError = new Error(`Clay returned ${response.status}`);
-    } catch (error) {
-      if (error instanceof ClayRejected) throw error;
-      lastError = error;
-    }
-  }
-
-  throw lastError instanceof Error ? lastError : new Error('Clay push failed');
-}
 
 async function markExported(ids: string[]): Promise<void> {
   const now = new Date().toISOString();
@@ -100,7 +55,8 @@ async function main(): Promise<void> {
     for (const row of pending) {
       const view = triggerView(row);
       try {
-        await post(webhook, {
+        await postToClay(webhook, {
+          record_type: 'trigger',
           trigger_id: view.id,
           trigger_type: view.type,
           fired_at: view.firedAt,
