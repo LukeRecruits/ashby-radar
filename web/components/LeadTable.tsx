@@ -2,8 +2,10 @@
  * One row per company, dense enough to scan a screenful.
  *
  * Column choices follow how the list gets worked rather than what the view happens to
- * hold. "Nobody in-house" is the strongest qualifier we have, so it reads as words rather
- * than a zero you have to interpret. Stalled roles get their own column because that is
+ * hold. The recruiter column reads as words rather than as a zero you have to interpret,
+ * and it says what it measures: whether a recruiting role is open on their board today.
+ * It used to say "In-house TA: Nobody", which claimed something it cannot see. The first
+ * live contact lookup found ten talent people at a company the list called "Nobody". Stalled roles get their own column because that is
  * the signal with evidence behind it. The 30-day change is blank for now and will stay
  * blank until the snapshot history is a month deep, which is honest.
  */
@@ -94,7 +96,7 @@ export function LeadTable({
             <th className={TH}>Hiring in</th>
             <th className={`${TH} text-right`}>Open</th>
             <th className={`${TH} text-right`}>30d</th>
-            <th className={TH}>In-house TA</th>
+            <th className={TH}>Recruiter req</th>
             <th className={`${TH} text-right`}>Pay shown</th>
             <th className={`${TH} text-right`}>Stalled</th>
             <th className={TH}>Signals</th>
@@ -168,10 +170,10 @@ export function LeadTable({
                 <td className={TD}>
                   {lead.recruiter_roles > 0 ? (
                     <span className="text-[var(--ink-soft)]">
-                      Hiring {lead.recruiter_roles}
+                      {lead.recruiter_roles} open
                     </span>
                   ) : (
-                    <span className="font-medium text-[var(--warm)]">Nobody</span>
+                    <span className="font-medium text-[var(--warm)]">None open</span>
                   )}
                 </td>
 

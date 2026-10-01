@@ -316,14 +316,14 @@ export default async function CompanyPage({
             tone={change !== null && change > 0 ? 'good' : undefined}
           />
           <Stat
-            label="In-house TA"
-            value={company.recruiter_roles > 0 ? `Hiring ${company.recruiter_roles}` : 'Nobody'}
+            label="Recruiter req"
+            value={company.recruiter_roles > 0 ? `${company.recruiter_roles} open` : 'None open'}
             note={
               company.recruiter_roles > 0
-                ? 'A recruiting role is open'
-                : 'No recruiting role on the board'
+                ? 'Hiring for their talent team'
+                : 'Not hiring a recruiter today'
             }
-            hint="The strongest single qualifier: who feels the candidate-experience problem with nobody to hand it to"
+            hint="Whether a recruiting role is open on their board right now. It is not evidence that they have no talent team: Synthesia has a Head of Talent and ten people under them, and no open recruiter req."
             tone={company.recruiter_roles > 0 ? undefined : 'warm'}
           />
           <Stat

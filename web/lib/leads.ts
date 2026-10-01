@@ -2,7 +2,7 @@
  * Reading the lead list, and the filter vocabulary the URL speaks.
  *
  * Every filter lives in the query string rather than in component state, so a segment
- * ("UK, 5-50 roles, nobody in-house") is a link Luke can bookmark, and the back button
+ * ("UK, 5-50 roles, no open recruiter req") is a link Luke can bookmark, and the back button
  * works. That is also why the whole page is a server component with a plain GET form:
  * there is no client-side fetching to keep in sync with the URL.
  */

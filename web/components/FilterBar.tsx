@@ -73,11 +73,11 @@ export function FilterBar({
         </label>
 
         <label>
-          <Label>In-house TA</Label>
+          <Label>Recruiter req</Label>
           <select name="ta" defaultValue={filters.ta} className={FIELD}>
             <option value="">Either way</option>
-            <option value="none">Nobody in-house</option>
-            <option value="has">Has recruiters</option>
+            <option value="none">None open</option>
+            <option value="has">Hiring a recruiter</option>
           </select>
         </label>
 

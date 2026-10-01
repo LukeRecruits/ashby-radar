@@ -109,6 +109,16 @@ Nine tables, defined in `supabase/migrations/`.
 | `contacts` | One row per person. Four fields and some dates, nothing else. Unique on the normalised LinkedIn URL |
 | `contact_suppressions` | Profile URLs that must never be stored again. The only table kept indefinitely |
 
+**`has_in_house_ta` is a misnomer and the console no longer repeats it.** It is true when
+a *recruiting role is open* on the board, which is not the same claim as "they have no
+talent team", and the console used to render it as "In-house TA: Nobody". The first live
+contact lookup disproved the inference on the first company tried: Synthesia is flagged
+false and has a Head of Talent of eighteen months plus ten others. Every label now says
+"recruiter req", and the 1,489 companies qualified on it are "not hiring a recruiter
+today", which is a weaker and more useful claim. The column keeps its name, because
+renaming it means recreating `lead_list` for no behavioural gain; it carries a comment in
+the database saying this.
+
 `companies` carries the lead fields: `display_name`, `domain` with a `domain_confidence`
 and `domain_source`, `top_country` / `top_locality` / `remote_share` derived from where
 the open roles actually are, and `parked_at` for companies set aside by hand.
@@ -318,8 +328,8 @@ select table_name, string_agg(privilege_type, ',')
 
 Every row should read `SELECT` and nothing else.
 
-A realistic filtered query over the full 5,731 rows (UK, 5-50 roles, no in-house
-recruiter, sorted by open roles) plans in 3ms and executes in 34ms, all from shared
+A realistic filtered query over the full 5,731 rows (UK, 5-50 roles, no open recruiter
+req, sorted by open roles) plans in 3ms and executes in 34ms, all from shared
 buffers. No materialised view needed.
 
 A second view, `lead_facets`, supplies the country and city filter options with company
@@ -341,7 +351,7 @@ after "who looks interesting", which is the one that costs something: LinkedIn a
 roughly a hundred invitations a rolling week, so every company opened here is a decision.
 
 Six reads in parallel, all keyed on `company_id`, nothing written. The page carries a stat
-strip (open roles and band, 30-day change, in-house TA, pay published, stalling count,
+strip (open roles and band, 30-day change, open recruiter reqs, pay published, stalling count,
 oldest open role), the open-role trend, signals with their evidence, four breakdowns
 (department, city, country, workplace), the twelve longest-open and twelve newest roles,
 and a provenance panel saying how we came to believe the domain belongs to the company.
