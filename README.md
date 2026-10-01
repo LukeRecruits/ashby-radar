@@ -29,6 +29,7 @@ Three scheduled GitHub Actions workflows do all the work. Supabase holds all sta
 | `enrich` | Weekly, Sun 06:30 UTC | Company names from board pages, then domain resolution |
 | `refresh` | Daily, 05:00 UTC | Calls the posting API for every company, writes jobs and a daily snapshot |
 | `triggers` | Daily, 07:15 UTC | Evaluates the six rules and writes signals |
+| `retention` | Monthly, 1st 04:00 UTC | Deletes contacts past the 24-month retention period |
 | `export` | Manual only | Writes companies.csv and triggers.csv as run artifacts |
 
 ## Build status
@@ -39,7 +40,7 @@ Three scheduled GitHub Actions workflows do all the work. Supabase holds all sta
 - [x] Console 1: clean locations and the `lead_list` read surface
 - [x] Console 2: the lead list page
 - [x] Console 3: the company page
-- [ ] Console 4: contacts, found on demand
+- [x] Console 4: contacts, found on demand
 - [ ] Console 5: the outreach funnel and the daily work queue
 - [ ] Console 6: health page, and a floor under `long_open`
 
@@ -94,7 +95,7 @@ network error can never be mistaken for a company leaving Ashby.
 
 ## Data model
 
-Seven tables, defined in `supabase/migrations/`.
+Nine tables, defined in `supabase/migrations/`.
 
 | Table | Holds |
 | --- | --- |
@@ -104,7 +105,9 @@ Seven tables, defined in `supabase/migrations/`.
 | `triggers` | One row per company per type per 30 days, with evidence |
 | `runs` | One row per workflow run, for health checks |
 | `discovery_log` | Where each board name came from, for debugging coverage |
-| `settings` | Key/value state that is not about a company: the backfill marker and the last digest timestamp |
+| `settings` | Key/value state that is not about a company: the backfill marker, the last digest timestamp, and the SHA-256 of the console's write token |
+| `contacts` | One row per person. Four fields and some dates, nothing else. Unique on the normalised LinkedIn URL |
+| `contact_suppressions` | Profile URLs that must never be stored again. The only table kept indefinitely |
 
 `companies` carries the lead fields: `display_name`, `domain` with a `domain_confidence`
 and `domain_source`, `top_country` / `top_locality` / `remote_share` derived from where
@@ -112,10 +115,11 @@ the open roles actually are, and `parked_at` for companies set aside by hand.
 
 Nothing is ever hard-deleted. Jobs get a `closed_at`, companies get an `inactive` status.
 
-### The six views the console reads
+### The seven views the console reads
 
-The console never touches a base table. Six views are its entire read surface, each one
-granted `select` to `anon` and nothing more.
+The console never touches a base table. Seven views are its entire read surface, each one
+granted `select` to `anon` and nothing more. Its writes are four named functions, not a
+view and not a key; see **The console's write path**.
 
 | View | Holds | Read by |
 | --- | --- | --- |
@@ -125,6 +129,7 @@ granted `select` to `anon` and nothing more.
 | `lead_role_groups` | Open roles rolled up by department, city, country and workplace, each with stale and paid counts | The four breakdown charts |
 | `lead_history` | Up to 120 days of daily snapshots per company | The trend sparkline |
 | `lead_signals` | Fired triggers with their jsonb evidence | The signals panel |
+| `lead_contacts` | The people on the list for a company | The contacts panel |
 
 `remote_share` counts only roles whose `workplaceType` is `Remote`, over the roles that
 state one. Until migration 0011 it counted Ashby's `isRemote`, which is true for Hybrid
@@ -255,8 +260,8 @@ curl -s -o /dev/null -w '%{http_code}\n' -u "luke:$CONSOLE_PASSWORD" https://ash
 401 then 200. Rotate the password in the Vercel project's environment variables; nothing
 in the repo needs to change.
 
-Three environment variables: `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` and
-`CONSOLE_PASSWORD`. All three are set on Production and Development. Preview has none, so
+Five environment variables: `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`,
+`CONSOLE_PASSWORD`, `CONSOLE_WRITE_TOKEN` and `EXA_API_KEY`. All three are set on Production and Development. Preview has none, so
 a PR preview will answer 401 and could not read the database anyway: the same trap
 CandidHQ has, and here it fails safe.
 
@@ -265,7 +270,8 @@ builds from the repo root, finds no Next.js, and fails with "No Next.js version
 detected". That is a dashboard field; the API token available here cannot write project
 settings.
 
-**It reads six views and can write nothing, which only became true in migration 0012.**
+**It reads seven views, and its only writes are four named functions.** The read half
+only became true in migration 0012.
 Every base table keeps RLS enabled with no policies, so the anon role returns zero rows
 from `companies`, `jobs`, `snapshots`, `triggers` and `runs`. Writes the console needs
 (parking a company, moving a contact through the funnel) go through server actions with a
@@ -364,8 +370,8 @@ because the sentence is the usable thing: "four roles open 120+ days, the oldest
 opener. There is a generic branch underneath, so a rule added later renders something
 useful on the day it fires rather than on the day somebody remembers to come back here.
 
-The link out to LinkedIn is a company name search, not a person. Contacts are sprint 4 and
-wait on the paperwork; see **Data rules**.
+The link out to LinkedIn is a company name search, not a person. Finding the person is
+the contacts panel below it.
 
 ### Locations, and why they needed cleaning first
 
@@ -400,7 +406,93 @@ After both migrations: 72 distinct countries, 465 distinct cities, zero junk val
 
 ### Contacts
 
-Not built yet, and not until the paperwork is. See **Data rules** below.
+Built, and the paperwork came first. The panel sits on the company page and does three
+things: shows who is already on the list, finds the talent lead on demand, and records an
+objection permanently.
+
+**Finding is not storing.** Pressing "Find the talent lead" runs one Exa search in that
+render and shows what came back. Nothing is written. A person reaches the database only
+when Add is pressed, which is the whole basis of the minimisation claim in
+`docs/prospecting-lia.md`: Radar holds somebody only once Luke has decided to approach
+them.
+
+**Two filters, because the search alone is not trustworthy.** A people search for Vertice
+returned people at STRATOS, CUBE and BigID. So a candidate is kept only if Exa's
+structured work history shows an open-ended role at this company (`lib/employer.ts`,
+matching on the company name and the domain label, conservatively: shared tokens have to
+include one of four characters or more, otherwise "Atlas" matches "Atlas Copco"), and
+only if the title is a talent, people or recruiting one (`lib/titles.ts`, which also
+ranks them, seniority first, with coordinators and sourcers last rather than excluded).
+Everyone dropped is counted and the reason is printed, so an empty result is never just
+empty.
+
+**Remove and Objected are different buttons on purpose.** Remove takes a row out and a
+later search can find them again, which is right for somebody added by mistake. Objected
+records the profile URL on the suppression list for good, deletes them, and makes any
+future insert fail. That is the Article 21(2) path and it is the one that has to be
+irreversible.
+
+Four fields are stored: name, current job title, profile URL, employer. Exa returns
+location, seniority band, time in post and a biography; those are used to rank and filter
+in memory and there is nowhere in the schema to put them.
+
+**The suppression trigger did not work the first time, and the reason is worth keeping.**
+`linkedin_key` is a stored generated column, and **a generated column is computed after
+BEFORE triggers run**, so `new.linkedin_key` was null inside the check, `where
+linkedin_key = null` matched nothing, and a suppressed person could be re-added. Tested
+from outside through PostgREST, it took one suppress and one add to see it. Migration
+0015 computes the key in the trigger instead. That is three for three now: a control in
+this project has never worked the first time it was asserted from outside the thing
+making the claim.
+
+### The console's write path
+
+The console holds the publishable key, which grants `anon`, and `anon` can write nothing.
+Contacts need writes, so there are four database functions and no new credential of any
+power:
+
+| Function | Does |
+| --- | --- |
+| `add_contact` | Upserts a person on the normalised profile URL. Refuses a suppressed one |
+| `set_contact_connection` | Flips "already connected", the warm-list flag LinkedIn exposes no API for |
+| `delete_contact` | Removes a row, leaving no suppression |
+| `suppress_contact` | Records an objection and deletes them. Returns how many rows went |
+
+Each is `security definer` and each checks a shared secret against
+`settings.console_write_token_sha256` before doing anything. The secret lives in the
+console's `CONSOLE_WRITE_TOKEN` and nowhere else; the database holds only its SHA-256, so
+reading that row gives nobody a working credential. It fails closed: no settings row, an
+empty token, or a token under 24 characters denies every write.
+
+Why not the service-role key: one bug that leaks an environment variable or lets a
+request reach an arbitrary URL would make the whole database writable. Why not an RLS
+policy for `anon`: the publishable key is designed to be public, so that is a write
+surface for anyone who ever sees it in a screenshot. With this arrangement, a leaked
+publishable key can read the lead views, which was always true, and still cannot write a
+row.
+
+Verified from outside, as `anon`, through PostgREST:
+
+```
+select on contacts                      401, permission denied for table contacts
+select on lead_contacts                 200
+insert into contacts                    401, permission denied
+patch lead_contacts                     401, permission denied for view lead_contacts
+add_contact with a wrong token          42501 not permitted
+add_contact with the right token        a uuid
+add_contact for a suppressed person     23514 contact ... is suppressed
+the same person, different URL spelling 23514 contact ... is suppressed
+purge_expired_contacts                  401, permission denied for function
+candidates_long_open                    401, permission denied for function
+```
+
+### Retention
+
+24 months from the last action on a contact, stated at
+`candidhq.tech/privacy/prospecting` and enforced by `purge_expired_contacts()`, which the
+monthly `retention` workflow calls with the figure from `src/config.ts`. It writes a run
+row every month including when it deletes nothing, because a retention job that only
+leaves a trace when it fires cannot be told apart from one that stopped running.
 
 ## Rules for talking to Ashby
 
@@ -411,23 +503,19 @@ Not built yet, and not until the paperwork is. See **Data rules** below.
 
 ## Data rules
 
-**Company and job data only, until the paperwork says otherwise.**
+**Company and job data, plus four fields about one person per company.**
 
-Phase 3's position was that Radar never stores a person and Clay holds the contacts. Half
-of that changed on 2026-10-01: Clay is gone, and Luke needs an outreach funnel tracked per
-contact, which means Radar will store people. That is a deliberate reversal, not a drift,
-and it carries conditions.
+Phase 3's position was that Radar never stores a person. That reversed on 2026-10-01
+because an outreach funnel has to be tracked per contact, and the reversal carried five
+conditions. All five exist, and they were built before the table was:
 
-Before a contacts table exists, all of this has to:
-
-- a written legitimate interests assessment (Article 6(1)(f))
-- an Article 14 notice, discharged in the first LinkedIn message via a link to a
-  prospecting privacy notice on candidhq.tech, since the data comes from a public profile
-  rather than from the person
-- a suppression list keyed on the LinkedIn profile URL, so a removal survives the next
-  lookup re-finding them
-- a stated retention period
-- a line in the record of processing activities
+| Condition | Where |
+| --- | --- |
+| Legitimate interests assessment, Article 6(1)(f) | `docs/prospecting-lia.md` |
+| Article 14 notice, linked in the first message | `candidhq.tech/privacy/prospecting` |
+| Suppression list that survives re-discovery | migrations 0013 and 0015 |
+| A stated retention period | 24 months, `src/config.ts` and the `retention` workflow |
+| Record of processing, and how to answer a request | `docs/prospecting-ropa.md` |
 
 CandidHQ's ICO registration (C1941533) covers the activity, since Radar is a CandidHQ
 prospecting tool. Data minimisation does the rest of the work: name, current title,
@@ -449,6 +537,11 @@ All secrets live in GitHub Actions secrets. `.env.example` lists every one.
 | `SUPABASE_SERVICE_ROLE_KEY` | every workflow |
 | `SLACK_WEBHOOK_URL` | the weekly digest, which no longer runs on a schedule. Never set |
 | `CLAY_WEBHOOK_URL` | the Clay hand-off, now retired. Never set, and deliberately so |
+
+The console has three of its own, on the Vercel project rather than in Actions:
+`CONSOLE_PASSWORD`, `CONSOLE_WRITE_TOKEN` and `EXA_API_KEY`. The first two fail closed
+when unset. The third fails soft: no key means the contacts panel offers the manual form
+and says why.
 
 The service-role key never leaves GitHub Actions and server-side env vars.
 

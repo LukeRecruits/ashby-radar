@@ -6,17 +6,26 @@
  * rolling week, so every row opened here is a decision, and the page is laid out as the
  * case for and against rather than as a dump of the record.
  *
- * Reads six shaped views and writes nothing. The outreach state that will eventually live
- * on this page belongs to sprint 5 and gets its own narrow server action; the publishable
- * key cannot write, which migration 0012 made true after 0011 proved it was not.
+ * Reads seven shaped views. Six of them it only reads; the seventh, `lead_contacts`, is
+ * paired with four named database functions that are the only writes this console can
+ * make. The publishable key still cannot write a row by itself, which migration 0012 made
+ * true after 0011 proved it was not, and 0013 kept true by putting the write path behind
+ * a secret the key does not contain.
+ *
+ * The contacts panel is the one part of this page that concerns a person. It finds them
+ * on demand and stores nobody until asked; see components/Contacts.tsx and
+ * docs/prospecting-lia.md.
  */
 
 import { notFound } from 'next/navigation';
 
 import { Breakdown } from '@/components/Breakdown';
+import { Contacts } from '@/components/Contacts';
 import { Evidence } from '@/components/Evidence';
 import { RoleList } from '@/components/RoleList';
 import { Trend } from '@/components/Trend';
+import { fetchContacts } from '@/lib/contacts';
+import { findTalentContacts, type LookupResult } from '@/lib/exa';
 import {
   ROLE_SAMPLE,
   WORKPLACE_LABELS,
@@ -127,7 +136,11 @@ export default async function CompanyPage({
   const { id } = await params;
   if (!isCompanyId(id)) notFound();
 
-  const [page, query] = await Promise.all([fetchCompany(id), searchParams]);
+  const [page, query, contacts] = await Promise.all([
+    fetchCompany(id),
+    searchParams,
+    fetchContacts(id),
+  ]);
   if (!page) notFound();
 
   const { company, groups, history, signals, oldestRoles, newestRoles } = page;
@@ -137,6 +150,31 @@ export default async function CompanyPage({
   // part is kept: anything else in there would be someone else's URL.
   const from = Array.isArray(query.from) ? query.from[0] : query.from;
   const backTo = from && from.startsWith('?') ? from : '';
+
+  // The panel's URLs. `back` is this page with the list's filters kept and the transient
+  // flags dropped, so a redirect after a write lands exactly here rather than on an
+  // unfiltered page, and a refresh does not re-run the search or re-show a stale message.
+  const back = `/company/${id}${backTo}`;
+  const findHref = `${back}${backTo ? '&' : '?'}find=1`;
+
+  const one = (value: string | string[] | undefined) =>
+    (Array.isArray(value) ? value[0] : value)?.trim() ?? '';
+
+  // The search runs during this render, only when asked for by name. It costs about
+  // $0.004 and stores nothing, so the only thing to guard against is running it by
+  // accident.
+  const lookup: LookupResult | null =
+    one(query.find) === '1'
+      ? await findTalentContacts(company.label, company.domain)
+      : null;
+
+  const err = one(query.err);
+  const ok = one(query.ok);
+  const message = err
+    ? ({ kind: 'err', text: err } as const)
+    : ok
+      ? ({ kind: 'ok', text: ok } as const)
+      : null;
 
   const departments = groupsOf(groups, 'department');
   const cities = groupsOf(groups, 'city');
@@ -239,7 +277,7 @@ export default async function CompanyPage({
               target="_blank"
               rel="noreferrer noopener"
               className="rounded-md border border-[var(--line-strong)] px-3 py-1.5 hover:border-[var(--accent)] hover:text-[var(--accent)]"
-              title="Search LinkedIn for this company by name. Contacts arrive in sprint 4, once the paperwork does."
+              title="Search LinkedIn for this company by name"
             >
               Find on LinkedIn
             </a>
@@ -382,6 +420,16 @@ export default async function CompanyPage({
           roles={newestRoles}
         />
       </div>
+
+      <Contacts
+        companyId={company.id}
+        companyLabel={company.label}
+        contacts={contacts}
+        lookup={lookup}
+        back={back}
+        findHref={findHref}
+        message={message}
+      />
 
       <section className="mt-4 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-4">
         <h2 className="mb-3 text-[13px] font-semibold tracking-tight">

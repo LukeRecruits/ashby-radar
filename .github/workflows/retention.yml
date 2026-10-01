@@ -1,0 +1,34 @@
+name: retention
+
+on:
+  schedule:
+    # Monthly, the 1st at 04:00 UTC. Before the daily refresh so a month's deletions are
+    # never interleaved with a run that is writing snapshots.
+    - cron: '0 4 1 * *'
+  workflow_dispatch:
+
+concurrency:
+  group: retention
+  cancel-in-progress: false
+
+jobs:
+  retention:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - name: Purge contacts past the retention period
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: npm run retention

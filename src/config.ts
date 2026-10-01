@@ -184,6 +184,15 @@ export const config = {
     markBatchSize: 500,
   },
 
+  contacts: {
+    /**
+     * How long a prospecting contact is kept after the last action taken on them, in
+     * months. Stated publicly at candidhq.tech/privacy/prospecting and enforced monthly
+     * by the retention workflow, so changing it here means changing that page too.
+     */
+    retentionMonths: 24,
+  },
+
   exports: {
     /** Written here, then uploaded as workflow artifacts. */
     outputDir: 'out',
