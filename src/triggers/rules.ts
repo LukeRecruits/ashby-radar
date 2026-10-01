@@ -140,11 +140,16 @@ export const RULES: Rule[] = [
   },
   {
     type: 'long_open',
-    describe: `A role open ${t.longOpen.minAgeDays}+ days`,
+    describe:
+      `${t.longOpen.minStaleRoles}+ roles open ${t.longOpen.minAgeDays}+ days, ` +
+      `on a board of ${t.longOpen.minOpenRoles}-${t.longOpen.maxOpenRoles}`,
     find: (ctx) =>
       candidates('candidates_long_open', {
         p_run_date: ctx.runDate,
         p_min_age_days: t.longOpen.minAgeDays,
+        p_min_stale_roles: t.longOpen.minStaleRoles,
+        p_min_open_roles: t.longOpen.minOpenRoles,
+        p_max_open_roles: t.longOpen.maxOpenRoles,
         p_max_evidence_jobs: t.longOpen.maxEvidenceJobs,
         p_dedupe_days: t.dedupeDays,
       }),

@@ -9,9 +9,10 @@
 const LINKS = [
   { href: '/', label: 'Work queue', hint: 'Who is waiting on you today' },
   { href: '/leads', label: 'Lead list', hint: 'Every company, filtered' },
+  { href: '/health', label: 'Health', hint: 'Whether the scheduled half is still working' },
 ];
 
-export function Nav({ current }: { current: '/' | '/leads' }) {
+export function Nav({ current }: { current: '/' | '/leads' | '/health' }) {
   return (
     <nav className="mb-4 flex items-center gap-4 border-b border-[var(--line)] pb-2 text-[13px]">
       {LINKS.map((link) => {

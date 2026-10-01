@@ -150,9 +150,28 @@ export const config = {
        * 4,167 active boards that fired for 3,217 of them, 77%, which is a
        * directory rather than a prospect list: almost every company has
        * something stale, so the signal carried no information. Raised to 120 on
-       * 2026-09-30. Lower it again only alongside a floor under staleRoles.
+       * 2026-09-30.
        */
       minAgeDays: 120,
+      /**
+       * And this many of them. One stale role is an accident, three is a
+       * pattern. At 120 days with no floor the rule still fired for 2,521 of
+       * 4,167 boards; with this and the band below it fires for 1,131.
+       *
+       * Evergreen postings ("General Application", "Don't see your role?") are
+       * excluded from the count entirely, in the rule and in every view, by
+       * jobs.is_evergreen. 474 of 64,827 open roles are one, and 105 companies
+       * had nothing else as their stale evidence. See migration 0019.
+       */
+      minStaleRoles: 3,
+      /**
+       * And a company in the band CandidHQ sells into. Deliberately the same
+       * numbers as sweetSpot, because it is the same claim about who the
+       * product is for: a two-person board with three old roles is not a
+       * company with a hiring problem worth solving.
+       */
+      minOpenRoles: 5,
+      maxOpenRoles: 50,
       maxEvidenceJobs: 5,
     },
     publishesComp: {

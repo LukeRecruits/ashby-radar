@@ -42,7 +42,7 @@ Three scheduled GitHub Actions workflows do all the work. Supabase holds all sta
 - [x] Console 3: the company page
 - [x] Console 4: contacts, found on demand
 - [x] Console 5: the outreach funnel and the daily work queue
-- [ ] Console 6: health page, and a floor under `long_open`
+- [x] Console 6: health page, and a floor under `long_open`
 
 The original build pack's phases 4 and 5 (coverage benchmark, public snapshot page) are
 superseded. On 2026-09-30 the product became a lead list rather than a signal feed, and
@@ -127,9 +127,9 @@ the open roles actually are, and `parked_at` for companies set aside by hand.
 
 Nothing is ever hard-deleted. Jobs get a `closed_at`, companies get an `inactive` status.
 
-### The ten views the console reads
+### The thirteen views the console reads
 
-The console never touches a base table. Ten views are its entire read surface, each one
+The console never touches a base table. Thirteen views are its entire read surface, each one
 granted `select` to `anon` and nothing more. Its writes are five named functions, not a
 view and not a key; see **The console's write path**.
 
@@ -145,6 +145,9 @@ view and not a key; see **The console's write path**.
 | `work_queue` | Every live contact with its next action and the company context | The work queue |
 | `funnel_counts` | Contacts per stage, including the empty stages | The funnel strip, and the stage picker |
 | `invite_usage` | Invitations sent in the rolling 7 days, 24 hours and 30 days | The invitation meter |
+| `health_runs` | Every workflow run with an outcome rather than two counters | Health, recent runs |
+| `health_workflows` | Per workflow: last run, last success, hours since each | Health, the table that matters |
+| `health_summary` | One row of coverage, freshness and the qualification funnel | Health, the numbers |
 
 `remote_share` counts only roles whose `workplaceType` is `Remote`, over the roles that
 state one. Until migration 0011 it counted Ashby's `isRemote`, which is true for Hybrid
@@ -170,7 +173,7 @@ be thousands of round trips a day. Every threshold is a function parameter passe
 | `hiring_spike` | Open roles up 5 or more on 30 days ago |
 | `first_recruiter` | A recruiting hire appears where there was none in the previous 90 days |
 | `sweet_spot` | Open roles enter the 5-50 band from outside it |
-| `long_open` | A role published 120+ days ago is still open |
+| `long_open` | 3+ non-evergreen roles published 120+ days ago are still open, on a board of 5-50 |
 | `publishes_comp` | Pay is shown on a job for the first time |
 
 ### Warm-up, and why silence is not a bug
@@ -190,11 +193,36 @@ they start firing the day the data supports them:
   starts.
 
 `long_open` is the exception. It reads `publishedAt` from Ashby rather than from our
-own history, so it is true from day one. That also makes it by far the loudest rule.
-At the 60 days the build pack specced, the first evaluation fired it for 3,217 of the
-4,167 active boards: 77%, which is a directory rather than a prospect list, because
-almost every company has something stale. `minAgeDays` is now 120. If it ever goes back
-down, put a floor under `staleRoles` at the same time.
+own history, so it is true from day one. That also made it by far the loudest rule, and
+taming it took three goes:
+
+- At the 60 days the build pack specced it fired for 3,217 of 4,167 active boards (77%),
+  which is a directory rather than a prospect list.
+- At 120 days, 2,521 boards (60%). Still a directory.
+- With a floor of **3+ stale roles on a board of 5-50 open roles**, and evergreen
+  postings not counted as stale at all: **1,131 boards, 27%**. Migration 0019.
+
+**An evergreen posting is not a stale role.** Blockstream's oldest "stalled" role is
+"Don't see an open position that fits? Apply Here!", live for 1,806 days. Measured before
+the change: 474 of 64,827 open roles are pipeline postings, and 105 companies had nothing
+else as their stale evidence, so the rule was telling us they were struggling to hire on
+the evidence of a speculative-application form.
+
+`jobs.is_evergreen` is a stored generated column over `is_evergreen_posting(title)`, so
+the definition exists once and the rule, `lead_list`, `lead_role_groups` and the company
+page all read the same one. This project has twice had a quantity defined in two places
+and watched them drift, so stale is defined once. Stored rather than computed per read
+because a regex across 64,827 titles on every console page is a cost paid thousands of
+times for an answer that changes only when a job is written.
+
+The pattern was written against the real titles and then every match was read back: all
+474 are genuine pipeline postings. It is tuned for precision over recall, because a false
+positive silences a real signal, and the floor of three absorbs the ones that slip past.
+Cost of the filter at the margin: 14 companies out of 669.
+
+Clearing the backlog mattered as much as changing the rule. The console renders the
+`triggers` table, not the rule, so until migration 0020 deleted the 1,387 rows the new
+rule would no longer stand behind, the floor had changed nothing anybody could see.
 
 ### The backfill marker
 
@@ -558,6 +586,26 @@ what counts as overdue. 21 days for an unanswered invitation, 7 for a message or
 as much as a reporting one: a free-text note against a named person is an opinion held
 indefinitely in a prospecting database, and `docs/prospecting-lia.md` says that is not
 what this is.
+
+### Health
+
+`/health` answers the question a green tick cannot: not "did it run" but "when did it last
+succeed, against how often it is meant to". The failure this guards against is the quiet
+one. A crashed workflow turns the Actions run red and sends an email; the dangerous
+version is every run succeeding while nothing happens, which is exactly how a sibling
+project in Luke's estate spent sixteen days writing no rows while reporting itself active.
+
+Three blocks, in the order things fail:
+
+- **Workflows.** Last success against the expected cadence, with late flagged. The
+  cadences live in `web/lib/health.ts` because the schedule is a fact about the workflow
+  files. A workflow that is scheduled and has no run row at all in 30 days is called out
+  by name, because absence is the one state a table of runs cannot show. Retired
+  workflows (`digest`) are listed as retired, and flagged if they have run this week.
+- **The funnel of qualification.** 5,731 discovered, 3,243 prospects, 1,925 in band, 1,489
+  not hiring a recruiter, 655 with three or more genuinely stale roles. A broken rule shows
+  up here as a collapse in the last number rather than as an error anywhere.
+- **The data behind it**, then the last 25 runs for reading after something looks wrong.
 
 ### Retention
 
