@@ -28,6 +28,15 @@ export type Contact = {
   is_connection: boolean;
   added_at: string;
   last_activity_at: string;
+  stage: string;
+  stage_changed_at: string;
+  no_reason: string | null;
+  stage_label: string;
+  stage_position: number;
+  is_terminal: boolean;
+  needs_action: boolean;
+  action_label: string | null;
+  days_in_stage: number;
 };
 
 export async function fetchContacts(companyId: string): Promise<Contact[]> {
@@ -35,7 +44,8 @@ export async function fetchContacts(companyId: string): Promise<Contact[]> {
     .from('lead_contacts')
     .select(
       'id, company_id, full_name, job_title, linkedin_url, linkedin_key, source, ' +
-        'is_connection, added_at, last_activity_at',
+        'is_connection, added_at, last_activity_at, stage, stage_changed_at, no_reason, ' +
+        'stage_label, stage_position, is_terminal, needs_action, action_label, days_in_stage',
     )
     .eq('company_id', companyId)
     .order('added_at', { ascending: true });
@@ -89,6 +99,26 @@ export async function setConnection(contactId: string, value: boolean): Promise<
 
 export async function deleteContact(contactId: string): Promise<boolean> {
   return call<boolean>('delete_contact', { p_contact_id: contactId });
+}
+
+/**
+ * Moving somebody along the ladder, or ending it.
+ *
+ * Setting the stage a contact is already on is allowed and useful: it restamps
+ * `stage_changed_at`, which is how "chased today" resets the waiting clock without
+ * inventing a stage for it. The database records an event only on an actual change, so
+ * the history stays a record of transitions rather than of button presses.
+ */
+export async function setStage(
+  contactId: string,
+  stage: string,
+  reason: string | null,
+): Promise<boolean> {
+  return call<boolean>('set_contact_stage', {
+    p_contact_id: contactId,
+    p_stage: stage,
+    p_reason: reason,
+  });
 }
 
 /** The objection path. Permanent, and survives a later lookup re-finding them. */

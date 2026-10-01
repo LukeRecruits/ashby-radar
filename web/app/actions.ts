@@ -1,7 +1,7 @@
 'use server';
 
 /**
- * The four writes, as server actions.
+ * The five writes, as server actions, shared by the company page and the work queue.
  *
  * Each one ends in a redirect back to the company page the form was submitted from, with
  * the list's filters still attached, because the next thing after adding a contact is
@@ -22,6 +22,7 @@ import {
   addContact,
   deleteContact,
   setConnection,
+  setStage,
   suppressContact,
 } from '@/lib/contacts';
 
@@ -91,6 +92,28 @@ export async function deleteContactAction(form: FormData): Promise<void> {
   await run(back, 'Removed', async () => {
     await deleteContact(text(form, 'contact_id'));
     return 'Removed. They can be found again by a later search.';
+  });
+}
+
+/**
+ * Moving somebody along, or ending it.
+ *
+ * The label comes from the form rather than from a lookup here, because the queue and
+ * the company page phrase the same transition differently ("Invited" on a row you are
+ * working, "Invite sent" on a stage picker) and the confirmation should say what the
+ * button said.
+ */
+export async function setStageAction(form: FormData): Promise<void> {
+  const back = safeBack(form.get('back'));
+  const stage = text(form, 'stage');
+  const said = text(form, 'said') || 'Moved';
+  const reason = text(form, 'reason') || null;
+
+  await run(back, said, async () => {
+    if (!stage) throw new Error('No stage given.');
+    const moved = await setStage(text(form, 'contact_id'), stage, reason);
+    if (!moved) throw new Error('That contact no longer exists.');
+    return said;
   });
 }
 

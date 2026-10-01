@@ -19,17 +19,21 @@
 
 import type { Candidate, LookupResult } from '@/lib/exa';
 import type { Contact } from '@/lib/contacts';
+import { NO_REASONS, type FunnelRow } from '@/lib/queue';
 import {
   addContactAction,
   deleteContactAction,
   setConnectionAction,
+  setStageAction,
   suppressContactAction,
-} from '@/app/company/[id]/actions';
+} from '@/app/actions';
 
 const BUTTON =
   'rounded-md border border-[var(--line-strong)] px-2.5 py-1 text-[12px] hover:border-[var(--accent)] hover:text-[var(--accent)]';
 const INPUT =
   'w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-2 py-1.5 text-[13px] placeholder:text-[var(--ink-faint)]';
+const SELECT =
+  'rounded-md border border-[var(--line)] bg-[var(--bg)] px-1.5 py-1 text-[12px]';
 
 function since(iso: string | null): string | null {
   if (!iso) return null;
@@ -74,7 +78,31 @@ function Person({
   );
 }
 
-function Saved({ contact, back }: { contact: Contact; back: string }) {
+/**
+ * A saved contact, with the whole ladder available.
+ *
+ * The queue offers one button because it is a list to work through. This offers the full
+ * picker, because the company page is where the cases the obvious move does not fit get
+ * sorted out: somebody who replied to the invitation before accepting it, or a No that
+ * needs reopening. The reason select only means anything for a No, and the database
+ * discards it for every other stage rather than letting a stale explanation linger.
+ */
+function Saved({
+  contact,
+  back,
+  stages,
+}: {
+  contact: Contact;
+  back: string;
+  stages: FunnelRow[];
+}) {
+  const days =
+    contact.days_in_stage === 0
+      ? 'today'
+      : contact.days_in_stage === 1
+        ? '1 day'
+        : `${contact.days_in_stage} days`;
+
   return (
     <Row>
       <Person
@@ -82,12 +110,41 @@ function Saved({ contact, back }: { contact: Contact; back: string }) {
         title={contact.job_title}
         url={contact.linkedin_url}
         note={
-          contact.is_connection
-            ? 'Already connected, so no invitation needed'
-            : 'Not connected yet'
+          <>
+            <span style={{ color: contact.needs_action ? 'var(--warm)' : undefined }}>
+              {contact.stage_label}
+            </span>
+            {` for ${days}`}
+            {contact.no_reason
+              ? ` · ${NO_REASONS.find((r) => r.value === contact.no_reason)?.label ?? contact.no_reason}`
+              : ''}
+            {contact.is_connection ? ' · already connected' : ''}
+          </>
         }
       />
       <div className="flex flex-wrap items-center gap-1.5">
+        <form action={setStageAction} className="flex items-center gap-1">
+          <input type="hidden" name="contact_id" value={contact.id} />
+          <input type="hidden" name="back" value={back} />
+          <input type="hidden" name="said" value={`${contact.full_name} moved`} />
+          <select name="stage" defaultValue={contact.stage} className={SELECT} aria-label="Stage">
+            {stages.map((stage) => (
+              <option key={stage.stage} value={stage.stage}>
+                {stage.label}
+              </option>
+            ))}
+          </select>
+          <select name="reason" defaultValue="no_response" className={SELECT} aria-label="Reason, if closing">
+            {NO_REASONS.map((reason) => (
+              <option key={reason.value} value={reason.value}>
+                {reason.label}
+              </option>
+            ))}
+          </select>
+          <button type="submit" className={BUTTON} title="Move them to this stage. The reason is only kept for a No.">
+            Move
+          </button>
+        </form>
         <form action={setConnectionAction}>
           <input type="hidden" name="contact_id" value={contact.id} />
           <input type="hidden" name="value" value={contact.is_connection ? '0' : '1'} />
@@ -190,6 +247,7 @@ export function Contacts({
   companyId,
   companyLabel,
   contacts,
+  stages,
   lookup,
   back,
   findHref,
@@ -198,6 +256,7 @@ export function Contacts({
   companyId: string;
   companyLabel: string;
   contacts: Contact[];
+  stages: FunnelRow[];
   lookup: LookupResult | null;
   back: string;
   findHref: string;
@@ -237,7 +296,7 @@ export function Contacts({
       {contacts.length ? (
         <ul className="mb-3">
           {contacts.map((contact) => (
-            <Saved key={contact.id} contact={contact} back={back} />
+            <Saved key={contact.id} contact={contact} back={back} stages={stages} />
           ))}
         </ul>
       ) : (

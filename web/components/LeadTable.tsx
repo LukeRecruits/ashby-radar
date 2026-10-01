@@ -13,15 +13,15 @@
 import { SIGNALS, type Lead } from '@/lib/leads';
 
 /**
- * The company name now opens the company page rather than the Ashby board, because the
- * page is where the decision gets made and the board is one click further on from there.
- * `from` carries the list's own query string over, so "back to the list" returns to the
- * segment being worked instead of an unfiltered first page.
+ * The company name opens the company page rather than the Ashby board, because the page is
+ * where the decision gets made and the board is one click further on from there.
+ *
+ * `from` carries the whole path back, not just the query string, because there are two
+ * places a company page can be opened from now and "back" has to mean the one you came
+ * from. It is validated as a local path at the other end.
  */
 function companyHref(id: string, backQuery: string): string {
-  return backQuery
-    ? `/company/${id}?from=${encodeURIComponent(backQuery)}`
-    : `/company/${id}`;
+  return `/company/${id}?from=${encodeURIComponent(`/leads${backQuery}`)}`;
 }
 
 function Chip({ label, title }: { label: string; title: string }) {

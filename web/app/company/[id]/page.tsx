@@ -26,6 +26,7 @@ import { RoleList } from '@/components/RoleList';
 import { Trend } from '@/components/Trend';
 import { fetchContacts } from '@/lib/contacts';
 import { findTalentContacts, type LookupResult } from '@/lib/exa';
+import { fetchStages } from '@/lib/queue';
 import {
   ROLE_SAMPLE,
   WORKPLACE_LABELS,
@@ -37,6 +38,10 @@ import {
 } from '@/lib/company';
 
 export const dynamic = 'force-dynamic';
+
+function one(value: string | string[] | undefined): string {
+  return (Array.isArray(value) ? value[0] : value)?.trim() ?? '';
+}
 
 function dateOf(iso: string | null, withYear = true): string {
   if (!iso) return 'Not stated';
@@ -136,29 +141,34 @@ export default async function CompanyPage({
   const { id } = await params;
   if (!isCompanyId(id)) notFound();
 
-  const [page, query, contacts] = await Promise.all([
+  const [page, query, contacts, stages] = await Promise.all([
     fetchCompany(id),
     searchParams,
     fetchContacts(id),
+    fetchStages(),
   ]);
   if (!page) notFound();
 
   const { company, groups, history, signals, oldestRoles, newestRoles } = page;
 
-  // The list's own query string, handed over in `from`, so "back to the list" returns to
-  // the segment Luke was working rather than to an unfiltered first page. Only the search
-  // part is kept: anything else in there would be someone else's URL.
-  const from = Array.isArray(query.from) ? query.from[0] : query.from;
-  const backTo = from && from.startsWith('?') ? from : '';
+  // Where the visitor came from, carried in `from` as a whole local path, so "back"
+  // returns to the queue or to the filtered segment of the list rather than to an
+  // unfiltered first page. Validated as a path on this site: a redirect or link target
+  // taken from the request is one somebody else can choose.
+  const fromRaw = one(query.from);
+  const from = fromRaw.startsWith('/') && !fromRaw.startsWith('//') ? fromRaw : '/';
+  const backLabel =
+    from === '/'
+      ? 'Back to the work queue'
+      : from.includes('?')
+        ? 'Back to the filtered list'
+        : 'Back to the lead list';
 
-  // The panel's URLs. `back` is this page with the list's filters kept and the transient
-  // flags dropped, so a redirect after a write lands exactly here rather than on an
-  // unfiltered page, and a refresh does not re-run the search or re-show a stale message.
-  const back = `/company/${id}${backTo}`;
-  const findHref = `${back}${backTo ? '&' : '?'}find=1`;
-
-  const one = (value: string | string[] | undefined) =>
-    (Array.isArray(value) ? value[0] : value)?.trim() ?? '';
+  // The panel's URLs. `back` is this page with `from` kept and the transient flags
+  // dropped, so a redirect after a write lands exactly here rather than on an unfiltered
+  // page, and a refresh does not re-run the search or re-show a stale message.
+  const back = `/company/${id}?from=${encodeURIComponent(from)}`;
+  const findHref = `${back}&find=1`;
 
   // The search runs during this render, only when asked for by name. It costs about
   // $0.004 and stores nothing, so the only thing to guard against is running it by
@@ -197,10 +207,10 @@ export default async function CompanyPage({
     <main className="mx-auto max-w-[1100px] px-4 py-6">
       <nav className="mb-4 text-[13px]">
         <a
-          href={`/${backTo}`}
+          href={from}
           className="text-[var(--ink-soft)] hover:text-[var(--accent)] hover:underline"
         >
-          ← {backTo ? 'Back to the filtered list' : 'Back to the lead list'}
+          ← {backLabel}
         </a>
       </nav>
 
@@ -425,6 +435,7 @@ export default async function CompanyPage({
         companyId={company.id}
         companyLabel={company.label}
         contacts={contacts}
+        stages={stages}
         lookup={lookup}
         back={back}
         findHref={findHref}

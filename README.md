@@ -41,7 +41,7 @@ Three scheduled GitHub Actions workflows do all the work. Supabase holds all sta
 - [x] Console 2: the lead list page
 - [x] Console 3: the company page
 - [x] Console 4: contacts, found on demand
-- [ ] Console 5: the outreach funnel and the daily work queue
+- [x] Console 5: the outreach funnel and the daily work queue
 - [ ] Console 6: health page, and a floor under `long_open`
 
 The original build pack's phases 4 and 5 (coverage benchmark, public snapshot page) are
@@ -95,7 +95,7 @@ network error can never be mistaken for a company leaving Ashby.
 
 ## Data model
 
-Nine tables, defined in `supabase/migrations/`.
+Eleven tables, defined in `supabase/migrations/`.
 
 | Table | Holds |
 | --- | --- |
@@ -108,6 +108,8 @@ Nine tables, defined in `supabase/migrations/`.
 | `settings` | Key/value state that is not about a company: the backfill marker, the last digest timestamp, and the SHA-256 of the console's write token |
 | `contacts` | One row per person. Four fields and some dates, nothing else. Unique on the normalised LinkedIn URL |
 | `contact_suppressions` | Profile URLs that must never be stored again. The only table kept indefinitely |
+| `contact_stages` | The ladder: stage, position, label, whether it is terminal, whether the ball is with us |
+| `contact_stage_events` | One row per transition. A contact id, a stage and a timestamp, and no personal data of its own |
 
 **`has_in_house_ta` is a misnomer and the console no longer repeats it.** It is true when
 a *recruiting role is open* on the board, which is not the same claim as "they have no
@@ -125,10 +127,10 @@ the open roles actually are, and `parked_at` for companies set aside by hand.
 
 Nothing is ever hard-deleted. Jobs get a `closed_at`, companies get an `inactive` status.
 
-### The seven views the console reads
+### The ten views the console reads
 
-The console never touches a base table. Seven views are its entire read surface, each one
-granted `select` to `anon` and nothing more. Its writes are four named functions, not a
+The console never touches a base table. Ten views are its entire read surface, each one
+granted `select` to `anon` and nothing more. Its writes are five named functions, not a
 view and not a key; see **The console's write path**.
 
 | View | Holds | Read by |
@@ -139,7 +141,10 @@ view and not a key; see **The console's write path**.
 | `lead_role_groups` | Open roles rolled up by department, city, country and workplace, each with stale and paid counts | The four breakdown charts |
 | `lead_history` | Up to 120 days of daily snapshots per company | The trend sparkline |
 | `lead_signals` | Fired triggers with their jsonb evidence | The signals panel |
-| `lead_contacts` | The people on the list for a company | The contacts panel |
+| `lead_contacts` | The people on the list for a company, with their stage | The contacts panel |
+| `work_queue` | Every live contact with its next action and the company context | The work queue |
+| `funnel_counts` | Contacts per stage, including the empty stages | The funnel strip, and the stage picker |
+| `invite_usage` | Invitations sent in the rolling 7 days, 24 hours and 30 days | The invitation meter |
 
 `remote_share` counts only roles whose `workplaceType` is `Remote`, over the roles that
 state one. Until migration 0011 it counted Ashby's `isRemote`, which is true for Hybrid
@@ -269,6 +274,11 @@ curl -s -o /dev/null -w '%{http_code}\n' -u "luke:$CONSOLE_PASSWORD" https://ash
 
 401 then 200. Rotate the password in the Vercel project's environment variables; nothing
 in the repo needs to change.
+
+Routes: `/` the work queue, `/leads` the lead list, `/company/{id}` one company. The
+`from` parameter on a company link carries the whole path back rather than a query string,
+so "back" returns to whichever of the two you came from, and it is validated as a local
+path at the other end.
 
 Five environment variables: `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`,
 `CONSOLE_PASSWORD`, `CONSOLE_WRITE_TOKEN` and `EXA_API_KEY`. All three are set on Production and Development. Preview has none, so
@@ -467,6 +477,7 @@ power:
 | `set_contact_connection` | Flips "already connected", the warm-list flag LinkedIn exposes no API for |
 | `delete_contact` | Removes a row, leaving no suppression |
 | `suppress_contact` | Records an objection and deletes them. Returns how many rows went |
+| `set_contact_stage` | Moves somebody along the ladder, or ends it with a reason code |
 
 Each is `security definer` and each checks a shared secret against
 `settings.console_write_token_sha256` before doing anything. The secret lives in the
@@ -495,6 +506,48 @@ the same person, different URL spelling 23514 contact ... is suppressed
 purge_expired_contacts                  401, permission denied for function
 candidates_long_open                    401, permission denied for function
 ```
+
+### The work queue
+
+`/` is the work queue and `/leads` is the lead list. That is the right way round: the list
+is fed weekly, the queue is worked daily.
+
+**One ordered stage, not a row of checkboxes.** Identified, Invite sent, Connected,
+Messaged, Replied, Demo booked, then two terminals, Customer and No. Checkboxes permit
+states that cannot happen (customer, never contacted) and do not answer the only question
+the page exists for, which is where somebody is now. The ladder is a table, so the views
+order by `position` rather than repeating a CASE, and adding a stage later is an insert.
+
+**"Already a connection" is not a stage.** It is a property of Luke's own network, it is
+not exposed by any LinkedIn API on any tier, and it is a manual flag. What it changes is
+the next action: somebody he is already connected to is a message from the moment they are
+identified, with no invitation spent. Those are the warm list and the queue puts them
+above the people who need inviting.
+
+**Every transition is recorded by trigger, not by the caller.** So days-in-stage,
+conversion between stages and the rolling invitation count are read out of the history
+rather than maintained. A transition made by hand in the SQL editor is in the history too.
+Setting the stage somebody is already on is allowed and restamps the clock, which is what
+"Chased" does, and the trigger records no event for it, so the history stays a record of
+transitions rather than of button presses.
+
+**The invitation budget is on the page.** LinkedIn allows roughly a hundred invitations per
+rolling seven days on every tier including Sales Navigator, so the meter counts the same
+rolling window rather than a calendar week, and turns warm at 75.
+
+Sections render in priority order and an empty section does not render: Replied, To
+message, To invite, Wanting a nudge, Waiting on them, Closed. Replies come first because a
+reply going cold is the only thing here with a real cost to delay.
+
+**The waiting thresholds live in `web/lib/queue.ts`, not in SQL**, because a view cannot
+take a parameter and a number like "chase after seven days" buried in a view definition
+stops being tunable. The view reports `days_in_stage` and the stage; the console decides
+what counts as overdue. 21 days for an unanswered invitation, 7 for a message or a demo.
+
+`no_reason` is a fixed vocabulary rather than free text, which is a data-protection choice
+as much as a reporting one: a free-text note against a named person is an opinion held
+indefinitely in a prospecting database, and `docs/prospecting-lia.md` says that is not
+what this is.
 
 ### Retention
 

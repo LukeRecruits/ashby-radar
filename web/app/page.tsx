@@ -1,127 +1,116 @@
 /**
- * The lead list. The one screen the console exists for.
+ * The work queue. The front door, because it is the only page that answers "what now".
  *
- * Everything is read in a server component, so the Supabase key never reaches the
- * browser and there is no loading state to design. Filters live in the URL, which makes
- * a segment shareable and the back button correct.
+ * The lead list is a list of companies and the company page is a case for one of them.
+ * Neither tells you what today looks like. This does: of the people already decided on,
+ * who is waiting on Luke, in the order that matters, with the invitation budget in view.
+ *
+ * Sections in priority order, and a section with nobody in it does not render at all.
+ * An empty queue should look empty rather than look like six headings over nothing.
  */
 
-import { FilterBar } from '@/components/FilterBar';
-import { LeadTable } from '@/components/LeadTable';
-import {
-  PAGE_SIZE,
-  fetchFacets,
-  fetchLeads,
-  fetchTotals,
-  parseFilters,
-  toQuery,
-} from '@/lib/leads';
+import { Funnel } from '@/components/Funnel';
+import { Nav } from '@/components/Nav';
+import { InviteMeter, Section } from '@/components/Queue';
+import { bucket, fetchQueue, WAITING_DAYS } from '@/lib/queue';
 
-// The underlying data changes once a day, but a stale lead list is worse than a slow one
-// when the next thing Luke does is act on a row. Always fresh.
 export const dynamic = 'force-dynamic';
 
-function Total({ value, label, hint }: { value: number; label: string; hint?: string }) {
-  return (
-    <div title={hint}>
-      <div className="nums text-lg font-semibold leading-tight">
-        {value.toLocaleString('en-GB')}
-      </div>
-      <div className="text-[11px] uppercase tracking-wide text-[var(--ink-faint)]">
-        {label}
-      </div>
-    </div>
-  );
-}
-
-export default async function Page({
+export default async function QueuePage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const filters = parseFilters(await searchParams);
+  const [{ rows, funnel, invites }, query] = await Promise.all([fetchQueue(), searchParams]);
+  const buckets = bucket(rows);
 
-  const [{ rows, total }, facets, totals] = await Promise.all([
-    fetchLeads(filters),
-    fetchFacets(),
-    fetchTotals(),
-  ]);
+  const one = (value: string | string[] | undefined) =>
+    (Array.isArray(value) ? value[0] : value)?.trim() ?? '';
+  const err = one(query.err);
+  const ok = one(query.ok);
 
-  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const page = Math.min(filters.page, pages);
-  const first = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
-  const last = Math.min(page * PAGE_SIZE, total);
+  const toDo = buckets.reply.length + buckets.message.length + buckets.invite.length;
 
   return (
-    <main className="mx-auto max-w-[1400px] px-4 py-6">
-      <header className="mb-5 flex flex-wrap items-end justify-between gap-6 border-b border-[var(--line)] pb-4">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Ashby Radar</h1>
-          <p className="mt-0.5 text-[13px] text-[var(--ink-soft)]">
-            Companies running Ashby, and which of them are worth a conversation.
-          </p>
+    <main className="mx-auto max-w-[1100px] px-4 py-6">
+      <Nav current="/" />
+
+      <header className="border-b border-[var(--line)] pb-4">
+        <div className="flex flex-wrap items-start justify-between gap-6">
+          <div>
+            <h1 className="text-xl font-semibold tracking-tight">
+              {toDo === 0 ? 'Nothing waiting on you' : `${toDo} waiting on you`}
+            </h1>
+            <p className="mt-1 text-[13px] text-[var(--ink-soft)]">
+              {rows.length === 0
+                ? 'Nobody in the funnel yet. Find companies on the lead list, then find the talent lead on their page.'
+                : [
+                    buckets.reply.length ? `${buckets.reply.length} to reply to` : null,
+                    buckets.message.length ? `${buckets.message.length} to message` : null,
+                    buckets.invite.length ? `${buckets.invite.length} to invite` : null,
+                    buckets.overdue.length ? `${buckets.overdue.length} wanting a nudge` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(', ') || 'Everything is waiting on them, not on you.'}
+            </p>
+          </div>
+          <InviteMeter usage={invites} />
         </div>
-        <div className="flex gap-7">
-          <Total value={totals.live} label="Live boards" hint="Active on Ashby today" />
-          <Total
-            value={totals.prospects}
-            label="Contactable"
-            hint="Live, with a domain, not parked"
-          />
-          <Total
-            value={totals.inBand}
-            label="5 to 50 roles"
-            hint="Contactable and the size CandidHQ sells into"
-          />
-          <Total
-            value={totals.noDomain}
-            label="Need a domain"
-            hint="Live but no domain resolved yet"
-          />
+
+        <div className="mt-4">
+          <Funnel rows={funnel} />
         </div>
       </header>
 
-      <FilterBar
-        filters={filters}
-        countries={facets.countries}
-        cities={facets.cities}
-        resultCount={total}
+      {err || ok ? (
+        <p
+          className="mt-3 rounded-md border px-2.5 py-1.5 text-[12px]"
+          style={{
+            borderColor: err ? 'var(--warm)' : 'var(--line-strong)',
+            color: err ? 'var(--warm)' : 'var(--ink-soft)',
+          }}
+        >
+          {err || ok}
+        </p>
+      ) : null}
+
+      <Section
+        title="Replied"
+        note="Deal with these first. A reply going cold is the only real loss here"
+        rows={buckets.reply}
+        back="/"
+        tone="warm"
       />
-
-      <div className="mt-4">
-        {/* The current segment, handed to each row so the company page can offer a way
-            back into it rather than back to an unfiltered list. */}
-        <LeadTable rows={rows} backQuery={toQuery({ ...filters, page })} />
-      </div>
-
-      <nav className="mt-4 flex items-center justify-between text-[13px]">
-        <span className="nums text-[var(--ink-soft)]">
-          {total === 0
-            ? 'No companies'
-            : `${first.toLocaleString('en-GB')}–${last.toLocaleString('en-GB')} of ${total.toLocaleString('en-GB')}`}
-        </span>
-        <div className="flex items-center gap-2">
-          {page > 1 ? (
-            <a
-              href={toQuery({ ...filters, page: page - 1 })}
-              className="rounded-md border border-[var(--line-strong)] px-3 py-1.5 hover:border-[var(--accent)] hover:text-[var(--accent)]"
-            >
-              Previous
-            </a>
-          ) : null}
-          <span className="nums text-[var(--ink-faint)]">
-            Page {page} of {pages}
-          </span>
-          {page < pages ? (
-            <a
-              href={toQuery({ ...filters, page: page + 1 })}
-              className="rounded-md border border-[var(--line-strong)] px-3 py-1.5 hover:border-[var(--accent)] hover:text-[var(--accent)]"
-            >
-              Next
-            </a>
-          ) : null}
-        </div>
-      </nav>
+      <Section
+        title="To message"
+        note="Connected, or already a connection, so no invitation needed"
+        rows={buckets.message}
+        back="/"
+      />
+      <Section
+        title="To invite"
+        note="Identified and not connected yet. Each one costs an invitation"
+        rows={buckets.invite}
+        back="/"
+      />
+      <Section
+        title="Wanting a nudge"
+        note={`Invitations past ${WAITING_DAYS.invite_sent} days, messages past ${WAITING_DAYS.messaged}`}
+        rows={buckets.overdue}
+        back="/"
+      />
+      <Section
+        title="Waiting on them"
+        note="Nothing to do yet. Here so the funnel is not a black box"
+        rows={buckets.waiting}
+        back="/"
+      />
+      <Section
+        title="Closed"
+        note="Customers and the ones that ended. Reopen from the company page"
+        rows={buckets.done}
+        back="/"
+      />
     </main>
   );
 }
