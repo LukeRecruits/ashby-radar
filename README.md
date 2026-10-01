@@ -109,7 +109,7 @@ Eleven tables, defined in `supabase/migrations/`.
 | `contacts` | One row per person. Four fields and some dates, nothing else. Unique on the normalised LinkedIn URL |
 | `contact_suppressions` | Profile URLs that must never be stored again. The only table kept indefinitely |
 | `contact_stages` | The ladder: stage, position, label, whether it is terminal, whether the ball is with us |
-| `contact_stage_events` | One row per transition. A contact id, a stage and a timestamp, and no personal data of its own |
+| `contact_stage_events` | One row per transition. A contact id, a stage and a timestamp. The id goes null when the contact is deleted, so the invitation count survives an erasure |
 
 **`has_in_house_ta` is a misnomer and the console no longer repeats it.** It is true when
 a *recruiting role is open* on the board, which is not the same claim as "they have no
@@ -530,6 +530,16 @@ rather than maintained. A transition made by hand in the SQL editor is in the hi
 Setting the stage somebody is already on is allowed and restamps the clock, which is what
 "Chased" does, and the trigger records no event for it, so the history stays a record of
 transitions rather than of button presses.
+
+**Deleting a contact must not delete the invitation.** The events table originally
+cascaded from `contacts`, so removing somebody erased the record that an invitation had
+been spent on them, and `invite_usage` reads the rolling count out of that history. Seen
+while clearing a test row: the count went from 1 to 0 on the delete, and LinkedIn's count
+did not. Deletions are not rare either, since the retention purge and every objection are
+deletions. `contact_id` is now `on delete set null` (migration 0018), which leaves "an
+invitation was sent on this date" with no subject attached. That is not personal data, so
+it survives an erasure honestly, and the funnel's arithmetic outlives the retention period:
+the shape of the funnel is ours, the people in it are theirs.
 
 **The invitation budget is on the page.** LinkedIn allows roughly a hundred invitations per
 rolling seven days on every tier including Sales Navigator, so the meter counts the same
