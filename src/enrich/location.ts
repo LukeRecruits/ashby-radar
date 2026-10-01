@@ -342,13 +342,29 @@ function mode<T>(items: T[], key: (item: T) => string | null): T | null {
  *
  * A company whose roles carry a country but no city still gets a country, so coverage
  * does not drop to whatever share of jobs name a city.
+ *
+ * `remoteShare` reads `workplaceType`, not `isRemote`. Ashby sets `isRemote` true for
+ * Hybrid as well as Remote: across 64,827 open roles, 35,102 have `isRemote` true while
+ * only 18,448 are Remote and 16,678 are Hybrid. Deriving the share from `isRemote` made a
+ * company posting nothing but hybrid roles read as 100% remote, which is the opposite of
+ * what it is. Migration 0011 recomputed the history on this definition.
+ *
+ * The denominator is the roles that state a workplace type rather than all of them, and a
+ * company whose roles all stay silent gets null instead of 0%. 8,667 open roles say
+ * nothing about workplace at all, and reading silence as "not remote" is the same mistake
+ * pointing the other way.
  */
 export function companyLocation(
-  jobs: { address: NormalisedAddress; isRemote: boolean | null }[],
+  jobs: {
+    address: NormalisedAddress;
+    isRemote: boolean | null;
+    workplaceType: string | null;
+  }[],
 ): { country: string | null; locality: string | null; remoteShare: number | null } {
   if (!jobs.length) return { country: null, locality: null, remoteShare: null };
-  const remote = jobs.filter((job) => job.isRemote === true).length;
-  const remoteShare = Math.round((remote / jobs.length) * 100);
+  const stated = jobs.filter((job) => job.workplaceType).length;
+  const remote = jobs.filter((job) => job.workplaceType === 'Remote').length;
+  const remoteShare = stated === 0 ? null : Math.round((remote / stated) * 100);
 
   const addresses = jobs.map((job) => job.address);
   const pair = mode(

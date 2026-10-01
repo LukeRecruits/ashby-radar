@@ -89,7 +89,9 @@ export default async function Page({
       />
 
       <div className="mt-4">
-        <LeadTable rows={rows} />
+        {/* The current segment, handed to each row so the company page can offer a way
+            back into it rather than back to an unfiltered list. */}
+        <LeadTable rows={rows} backQuery={toQuery({ ...filters, page })} />
       </div>
 
       <nav className="mt-4 flex items-center justify-between text-[13px]">

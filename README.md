@@ -37,8 +37,8 @@ Three scheduled GitHub Actions workflows do all the work. Supabase holds all sta
 - [x] Phase 2: verify and daily refresh
 - [x] Phase 3: triggers and hand-off
 - [x] Console 1: clean locations and the `lead_list` read surface
-- [ ] Console 2: the lead list page
-- [ ] Console 3: the company page
+- [x] Console 2: the lead list page
+- [x] Console 3: the company page
 - [ ] Console 4: contacts, found on demand
 - [ ] Console 5: the outreach funnel and the daily work queue
 - [ ] Console 6: health page, and a floor under `long_open`
@@ -105,13 +105,35 @@ Seven tables, defined in `supabase/migrations/`.
 | `runs` | One row per workflow run, for health checks |
 | `discovery_log` | Where each board name came from, for debugging coverage |
 | `settings` | Key/value state that is not about a company: the backfill marker and the last digest timestamp |
-| `lead_list` | A **view**, not a table. One row per company with its latest snapshot, stale-role counts and signals. The console's entire read surface |
 
 `companies` carries the lead fields: `display_name`, `domain` with a `domain_confidence`
 and `domain_source`, `top_country` / `top_locality` / `remote_share` derived from where
 the open roles actually are, and `parked_at` for companies set aside by hand.
 
 Nothing is ever hard-deleted. Jobs get a `closed_at`, companies get an `inactive` status.
+
+### The six views the console reads
+
+The console never touches a base table. Six views are its entire read surface, each one
+granted `select` to `anon` and nothing more.
+
+| View | Holds | Read by |
+| --- | --- | --- |
+| `lead_list` | One row per company: latest snapshot, stale-role counts, signal timestamps, role band | The lead list, and the company page header |
+| `lead_facets` | Country and city filter options with company counts | The filter bar |
+| `lead_roles` | Open roles, one per row, with an `age_days` | The longest-open and newest-posted tables |
+| `lead_role_groups` | Open roles rolled up by department, city, country and workplace, each with stale and paid counts | The four breakdown charts |
+| `lead_history` | Up to 120 days of daily snapshots per company | The trend sparkline |
+| `lead_signals` | Fired triggers with their jsonb evidence | The signals panel |
+
+`remote_share` counts only roles whose `workplaceType` is `Remote`, over the roles that
+state one. Until migration 0011 it counted Ashby's `isRemote`, which is true for Hybrid
+as well: 35,102 of 64,827 open roles have `isRemote` true, but only 18,448 are Remote and
+16,678 are Hybrid, so a company posting nothing but hybrid roles read as 100% remote. The
+denominator excludes the 8,667 roles that say nothing about workplace at all, and a
+company whose roles are all silent gets null rather than 0%. `src/enrich/location.ts` and
+migration 0011 implement the same definition and have to stay in step, the same way the
+location cleanup does.
 
 ## Triggers
 
@@ -243,17 +265,52 @@ builds from the repo root, finds no Next.js, and fails with "No Next.js version
 detected". That is a dashboard field; the API token available here cannot write project
 settings.
 
-**It reads one view and can write nothing.** `lead_list` is granted to `anon`; every base
-table keeps RLS enabled with no policies, so the anon role returns zero rows from
-`companies`, `jobs`, `snapshots`, `triggers` and `runs`, and cannot write to any of them.
-Verified by setting the role and trying. Writes the console needs (parking a company,
-moving a contact through the funnel) go through server actions with a narrow key, not
-through the view.
+**It reads six views and can write nothing, which only became true in migration 0012.**
+Every base table keeps RLS enabled with no policies, so the anon role returns zero rows
+from `companies`, `jobs`, `snapshots`, `triggers` and `runs`. Writes the console needs
+(parking a company, moving a contact through the funnel) go through server actions with a
+narrow key, not through a view.
 
-`lead_list` is a plain view rather than `security_invoker`, deliberately. It runs with the
-owner's rights and so reads through the base tables' RLS, which means one shaped read-only
-surface is exposed instead of granting `anon` direct select on four tables and trying to
-narrow it back down afterwards.
+The views are plain views rather than `security_invoker`, deliberately. They run with the
+owner's rights and so read through the base tables' RLS, which means a handful of shaped
+read-only surfaces are exposed instead of granting `anon` direct select on five tables and
+trying to narrow it back down afterwards.
+
+**The write hole that was open until 2026-10-01.** Supabase ships `alter default
+privileges in schema public grant all on tables to anon, authenticated`, so every view
+created in `public` arrives with insert, update, delete and truncate already granted to
+anon. The `grant select on lead_list to anon` lines in migrations 0008, 0010 and 0011 did
+nothing: they granted a privilege anon already held, and read like a restriction while
+restricting nothing.
+
+On the base tables that was survivable, because RLS outranks a grant. On these views it
+was not, because a view has no RLS of its own and a plain view's writes execute with the
+owner's rights, which is to say they bypass the base tables' RLS entirely. The property
+that makes a plain view a safe read surface is exactly what makes a write through one
+unsafe. And three of the four views added in 0011 are simple single-table selects, which
+Postgres makes automatically updatable: `information_schema.views` reported `is_updatable`
+YES for `lead_roles`, `lead_history` and `lead_signals`, and `update lead_signals set
+reviewed = true` run as anon was accepted rather than refused. The publishable key is a
+browser-grade credential and it could have rewritten the jobs table.
+
+`lead_list`, `lead_facets` and `lead_role_groups` were never writable, but only because
+aggregates and unions make a view non-auto-updatable. That is luck, not design. Migration
+0012 revokes every write privilege from anon and authenticated on all six views, revokes
+everything on all seven base tables, and takes the write privileges out of the schema's
+default privileges so the next view added does not arrive wide open.
+
+This is the second control in this project that turned out not to be doing its job the
+first time anyone tested it from the outside; the console being publicly readable while
+Vercel reported it protected was the first. Run this after any migration that adds a view:
+
+```sql
+select table_name, string_agg(privilege_type, ',')
+  from information_schema.role_table_grants
+ where grantee in ('anon','authenticated') and table_schema = 'public'
+ group by table_name;
+```
+
+Every row should read `SELECT` and nothing else.
 
 A realistic filtered query over the full 5,731 rows (UK, 5-50 roles, no in-house
 recruiter, sorted by open roles) plans in 3ms and executes in 34ms, all from shared
@@ -270,6 +327,45 @@ back button behaves. Sorting always puts nulls last: a company with no 30-day ba
 is not the fastest-growing company on the list, which is where the default would put it
 while the history is still filling. Paging tiebreaks on `id`, because most companies share
 an open-role count and offset paging over ties repeats and skips rows.
+
+### The company page
+
+`/company/{id}`, reached by clicking a company name in the list. It answers the question
+after "who looks interesting", which is the one that costs something: LinkedIn allows
+roughly a hundred invitations a rolling week, so every company opened here is a decision.
+
+Six reads in parallel, all keyed on `company_id`, nothing written. The page carries a stat
+strip (open roles and band, 30-day change, in-house TA, pay published, stalling count,
+oldest open role), the open-role trend, signals with their evidence, four breakdowns
+(department, city, country, workplace), the twelve longest-open and twelve newest roles,
+and a provenance panel saying how we came to believe the domain belongs to the company.
+
+Three things worth knowing before changing it:
+
+- **The trend is a hand-drawn inline SVG, not a chart library.** One series with at most
+  120 points did not justify the console's first client-side dependency, and the whole app
+  is server components. Per-point tooltips are plain SVG `<title>` elements, so hover works
+  with no JavaScript at all. The y axis spans the series rather than starting at zero,
+  which is right for a trend line and wrong for a bar, and both end values are printed so
+  the span is never merely implied.
+- **`lead_role_groups` repeats `from jobs where closed_at is null` four times on purpose.**
+  The first version shared one CTE, which is tidier and was 25 times slower: a CTE is an
+  optimisation fence, so Postgres materialised all 64,827 open roles, scanned that four
+  times and discarded 64,797 rows each time. 83ms, with `jobs_company_open_idx` never
+  touched. Repeating the from-clause lets the `company_id` predicate push into each branch:
+  index scan, 3.2ms for OpenAI's 836 roles. Do not refactor the repetition away.
+- **Breakdowns fold the tail into "Other" past eight groups**, and the bars plus Other
+  always sum to the open-role count, so a chart cannot quietly disagree with the number in
+  the header. OpenAI has 33 departments; a chart of 33 bars answers nothing.
+
+Signal evidence has been stored as jsonb on every trigger row since phase 3 and nothing
+ever read it back until now. Each rule gets its own sentence rather than a key/value dump,
+because the sentence is the usable thing: "four roles open 120+ days, the oldest 214" is an
+opener. There is a generic branch underneath, so a rule added later renders something
+useful on the day it fires rather than on the day somebody remembers to come back here.
+
+The link out to LinkedIn is a company name search, not a person. Contacts are sprint 4 and
+wait on the paperwork; see **Data rules**.
 
 ### Locations, and why they needed cleaning first
 

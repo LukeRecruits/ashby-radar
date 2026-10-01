@@ -10,6 +10,18 @@
 
 import { SIGNALS, type Lead } from '@/lib/leads';
 
+/**
+ * The company name now opens the company page rather than the Ashby board, because the
+ * page is where the decision gets made and the board is one click further on from there.
+ * `from` carries the list's own query string over, so "back to the list" returns to the
+ * segment being worked instead of an unfiltered first page.
+ */
+function companyHref(id: string, backQuery: string): string {
+  return backQuery
+    ? `/company/${id}?from=${encodeURIComponent(backQuery)}`
+    : `/company/${id}`;
+}
+
 function Chip({ label, title }: { label: string; title: string }) {
   return (
     <span
@@ -58,7 +70,13 @@ const TH =
   'px-3 py-2 text-left text-[11px] font-medium uppercase tracking-wide text-[var(--ink-faint)] whitespace-nowrap';
 const TD = 'px-3 py-2 align-top';
 
-export function LeadTable({ rows }: { rows: Lead[] }) {
+export function LeadTable({
+  rows,
+  backQuery = '',
+}: {
+  rows: Lead[];
+  backQuery?: string;
+}) {
   if (!rows.length) {
     return (
       <div className="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-10 text-center text-[13px] text-[var(--ink-soft)]">
@@ -92,14 +110,21 @@ export function LeadTable({ rows }: { rows: Lead[] }) {
               >
                 <td className={TD}>
                   <a
-                    href={lead.board_url}
-                    target="_blank"
-                    rel="noreferrer noopener"
+                    href={companyHref(lead.id, backQuery)}
                     className="font-medium text-[var(--ink)] hover:text-[var(--accent)] hover:underline"
                   >
                     {lead.label}
                   </a>
                   <div className="mt-0.5 flex items-center gap-2 text-[11px] text-[var(--ink-faint)]">
+                    <a
+                      href={lead.board_url}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="hover:text-[var(--accent)] hover:underline"
+                      title="The Ashby job board"
+                    >
+                      Board
+                    </a>
                     {lead.domain ? (
                       <a
                         href={`https://${lead.domain}`}
@@ -126,7 +151,10 @@ export function LeadTable({ rows }: { rows: Lead[] }) {
                 <td className={TD}>
                   <Where lead={lead} />
                   {lead.remote_share !== null && lead.remote_share >= 50 ? (
-                    <div className="mt-0.5 text-[11px] text-[var(--ink-faint)]">
+                    <div
+                      className="mt-0.5 text-[11px] text-[var(--ink-faint)]"
+                      title="Share of the roles that state a workplace type and say Remote. Hybrid is counted separately; see the company page."
+                    >
                       {lead.remote_share}% remote
                     </div>
                   ) : null}
