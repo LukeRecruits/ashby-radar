@@ -130,22 +130,21 @@ export function normaliseAddress(address: RawAddress): NormalisedAddress {
   return fromPostal(address?.postalAddress);
 }
 
-/** Picks the most common non-null value, ties broken by first appearance. */
-function mode(values: (string | null)[]): string | null {
-  const counts = new Map<string, number>();
-  for (const value of values) {
-    if (!value) continue;
-    counts.set(value, (counts.get(value) ?? 0) + 1);
+/** Picks the most frequent key, ties broken by first appearance. */
+function mode<T>(items: T[], key: (item: T) => string | null): T | null {
+  const counts = new Map<string, { count: number; item: T }>();
+  for (const item of items) {
+    const k = key(item);
+    if (!k) continue;
+    const seen = counts.get(k);
+    if (seen) seen.count += 1;
+    else counts.set(k, { count: 1, item });
   }
-  let best: string | null = null;
-  let bestCount = 0;
-  for (const [value, count] of counts) {
-    if (count > bestCount) {
-      best = value;
-      bestCount = count;
-    }
+  let best: { count: number; item: T } | null = null;
+  for (const entry of counts.values()) {
+    if (!best || entry.count > best.count) best = entry;
   }
-  return best;
+  return best?.item ?? null;
 }
 
 /**
@@ -154,15 +153,35 @@ function mode(values: (string | null)[]): string | null {
  * Not the same thing as a head office, and deliberately so. Synthesia is registered in
  * London and posts roles across Europe and New York; for working out who to talk to,
  * where the roles are beats where the paperwork lives.
+ *
+ * Country and locality are picked as a pair, not separately. Picking the modal country
+ * and the modal locality independently produced incoherent answers: Talentful came out
+ * as "London, United States", because most of its roles are American and its single
+ * largest city is London. The pair is always a place that exists.
+ *
+ * A company whose roles carry a country but no city still gets a country, so coverage
+ * does not drop to whatever share of jobs name a city.
  */
 export function companyLocation(
   jobs: { address: NormalisedAddress; isRemote: boolean | null }[],
 ): { country: string | null; locality: string | null; remoteShare: number | null } {
   if (!jobs.length) return { country: null, locality: null, remoteShare: null };
   const remote = jobs.filter((job) => job.isRemote === true).length;
+  const remoteShare = Math.round((remote / jobs.length) * 100);
+
+  const addresses = jobs.map((job) => job.address);
+  const pair = mode(
+    addresses.filter((a) => a.locality && a.country),
+    (a) => `${a.locality}\u0000${a.country}`,
+  );
+  if (pair) return { country: pair.country, locality: pair.locality, remoteShare };
+
+  // No job names both. Fall back to each on its own rather than returning nothing.
+  const byLocality = mode(addresses, (a) => a.locality);
+  const byCountry = mode(addresses, (a) => a.country);
   return {
-    country: mode(jobs.map((job) => job.address.country)),
-    locality: mode(jobs.map((job) => job.address.locality)),
-    remoteShare: Math.round((remote / jobs.length) * 100),
+    country: byCountry?.country ?? null,
+    locality: byLocality?.locality ?? null,
+    remoteShare,
   };
 }
