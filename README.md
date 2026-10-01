@@ -206,14 +206,42 @@ A Next.js app in `web/`, deployed as the Vercel project `ashby-radar-console`
 (`team_JHU45F3lvdghoCwutnM1jddg`), separate from every other project Luke runs. Pushes to
 `main` deploy it; there is no local dev here either.
 
-**Access is Vercel Authentication, not a password.** Every deployment URL requires being
-signed into Vercel with access to the team, which for a one-person internal tool is
-stronger than a shared password and has nothing to remember. Switching to a password is a
-single project setting if the URL ever needs showing to someone off the team.
+**Access is HTTP Basic auth in `web/proxy.ts`, and it fails closed.**
 
-It needs two environment variables, `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY`, both
-set on Production. Preview branches have none, so a PR preview will fail to read the
-database until they are added: the same trap CandidHQ has.
+The first deployment of this app was publicly readable. Vercel reported the project as
+protected (`ssoProtection: enabled`, `deploymentType: all_except_custom_domains`) and the
+production `.vercel.app` URL still answered 200 to an anonymous `curl` and served the
+entire lead list. It was taken down within a minute. Whatever the cause (plan tier, or
+that setting not covering production aliases), the conclusion stands: protection that
+lives in a dashboard is protection you cannot test from inside the application, and in
+this case could not reliably be read back either.
+
+So the gate is code now. `proxy.ts` checks a password from `CONSOLE_PASSWORD` on every
+path, static chunks included, and denies when that variable is unset or empty. A
+misconfiguration therefore produces a console nobody can reach rather than a lead list
+anyone can read. Any username is accepted; on a single-operator tool a username is a
+field to remember rather than a second factor.
+
+Verify it after any change to the gate, because this is the one thing that has already
+gone wrong once:
+
+```
+curl -s -o /dev/null -w '%{http_code}\n' https://ashby-radar-console.vercel.app/
+curl -s -o /dev/null -w '%{http_code}\n' -u "luke:$CONSOLE_PASSWORD" https://ashby-radar-console.vercel.app/
+```
+
+401 then 200. Rotate the password in the Vercel project's environment variables; nothing
+in the repo needs to change.
+
+Three environment variables: `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` and
+`CONSOLE_PASSWORD`. All three are set on Production and Development. Preview has none, so
+a PR preview will answer 401 and could not read the database anyway: the same trap
+CandidHQ has, and here it fails safe.
+
+**Root Directory must be `web` in the project's build settings.** Without it a git push
+builds from the repo root, finds no Next.js, and fails with "No Next.js version
+detected". That is a dashboard field; the API token available here cannot write project
+settings.
 
 **It reads one view and can write nothing.** `lead_list` is granted to `anon`; every base
 table keeps RLS enabled with no policies, so the anon role returns zero rows from
