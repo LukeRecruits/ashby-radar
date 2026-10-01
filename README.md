@@ -202,8 +202,18 @@ nothing new.
 
 ## The console
 
-A Next.js app in `web/`, deployed as its own Vercel project, gated by Vercel deployment
-protection rather than any login code of its own. One user, one password.
+A Next.js app in `web/`, deployed as the Vercel project `ashby-radar-console`
+(`team_JHU45F3lvdghoCwutnM1jddg`), separate from every other project Luke runs. Pushes to
+`main` deploy it; there is no local dev here either.
+
+**Access is Vercel Authentication, not a password.** Every deployment URL requires being
+signed into Vercel with access to the team, which for a one-person internal tool is
+stronger than a shared password and has nothing to remember. Switching to a password is a
+single project setting if the URL ever needs showing to someone off the team.
+
+It needs two environment variables, `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY`, both
+set on Production. Preview branches have none, so a PR preview will fail to read the
+database until they are added: the same trap CandidHQ has.
 
 **It reads one view and can write nothing.** `lead_list` is granted to `anon`; every base
 table keeps RLS enabled with no policies, so the anon role returns zero rows from
@@ -220,6 +230,18 @@ narrow it back down afterwards.
 A realistic filtered query over the full 5,731 rows (UK, 5-50 roles, no in-house
 recruiter, sorted by open roles) plans in 3ms and executes in 34ms, all from shared
 buffers. No materialised view needed.
+
+A second view, `lead_facets`, supplies the country and city filter options with company
+counts. PostgREST has no distinct-with-count, and deriving 465 cities in the application
+would mean reading every row to populate a dropdown. The counts are over all live unparked
+companies rather than over the current filter, which keeps San Francisco, New York and
+London at the top of the city list instead of Albany.
+
+Every filter lives in the query string, so a segment is a link worth bookmarking and the
+back button behaves. Sorting always puts nulls last: a company with no 30-day baseline yet
+is not the fastest-growing company on the list, which is where the default would put it
+while the history is still filling. Paging tiebreaks on `id`, because most companies share
+an open-role count and offset paging over ties repeats and skips rows.
 
 ### Locations, and why they needed cleaning first
 

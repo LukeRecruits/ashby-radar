@@ -1,0 +1,51 @@
+@import 'tailwindcss';
+
+/*
+ * A deliberately small palette. This is a dense internal table that one person reads for
+ * twenty minutes at a time, so the priorities are legibility at small sizes and enough
+ * contrast to scan a column of numbers, not personality.
+ *
+ * Nothing here is shared with CandidHQ, in either direction. Separate product, separate
+ * tokens, by rule.
+ */
+:root {
+  --bg: #fbfbfa;
+  --panel: #ffffff;
+  --line: #e4e4e2;
+  --line-strong: #d0d0cd;
+  --ink: #1b1b19;
+  --ink-soft: #6b6b66;
+  --ink-faint: #94948f;
+  --accent: #1d4ed8;
+  --warm: #9a3412;
+  --good: #166534;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #131312;
+    --panel: #1b1b1a;
+    --line: #2e2e2c;
+    --line-strong: #40403d;
+    --ink: #f0efed;
+    --ink-soft: #a3a39d;
+    --ink-faint: #76766f;
+    --accent: #93b4ff;
+    --warm: #f0a97c;
+    --good: #86d39d;
+    color-scheme: dark;
+  }
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Tabular figures throughout the table, so columns of counts line up vertically. */
+.nums {
+  font-variant-numeric: tabular-nums;
+}
