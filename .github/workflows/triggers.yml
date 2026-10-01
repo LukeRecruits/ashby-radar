@@ -7,12 +7,6 @@ on:
     # read the snapshots the refresh writes, so the order matters more than the hour.
     - cron: '15 7 * * *'
   workflow_dispatch:
-    inputs:
-      digest:
-        description: 'Send the Slack digest on this run, whatever day it is'
-        type: boolean
-        required: false
-        default: false
 
 concurrency:
   group: triggers
@@ -40,30 +34,9 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: npm run triggers
 
-      # Both hand-offs run even when a rule failed above, so the signals that did fire
-      # still reach Luke. The run is already marked failed, which is what surfaces it.
-      - name: Push to Clay
-        if: ${{ !cancelled() }}
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          CLAY_WEBHOOK_URL: ${{ secrets.CLAY_WEBHOOK_URL }}
-        run: npm run clay
-
-      - name: Is the digest due
-        if: ${{ !cancelled() }}
-        id: due
-        run: |
-          if [ "${{ inputs.digest }}" = "true" ] || [ "$(date -u +%u)" = "1" ]; then
-            echo "send=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "send=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Send the weekly Slack digest
-        if: ${{ !cancelled() && steps.due.outputs.send == 'true' }}
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-        run: npm run digest
+      # The Clay push and the Slack digest used to run here. Both are now decided
+      # against: Clay was dropped on 2026-10-01 once the console took over segmentation
+      # and Exa took over contact discovery, and the digest was never wanted. The code
+      # and the npm scripts are kept (`npm run clay`, `npm run digest`) so either can be
+      # re-added in one step, but neither belongs on a schedule for a decision we have
+      # already taken the other way.

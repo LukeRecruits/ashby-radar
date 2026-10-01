@@ -28,7 +28,7 @@ Three scheduled GitHub Actions workflows do all the work. Supabase holds all sta
 | `discovery` | Weekly, Sun 03:00 UTC | Mines Common Crawl and Wayback for new board names |
 | `enrich` | Weekly, Sun 06:30 UTC | Company names from board pages, then domain resolution |
 | `refresh` | Daily, 05:00 UTC | Calls the posting API for every company, writes jobs and a daily snapshot |
-| `triggers` | Daily, 07:15 UTC | Evaluates the six rules, pushes to Clay, sends the Monday digest |
+| `triggers` | Daily, 07:15 UTC | Evaluates the six rules and writes signals |
 | `export` | Manual only | Writes companies.csv and triggers.csv as run artifacts |
 
 ## Build status
@@ -36,8 +36,17 @@ Three scheduled GitHub Actions workflows do all the work. Supabase holds all sta
 - [x] Phase 1: foundations and discovery
 - [x] Phase 2: verify and daily refresh
 - [x] Phase 3: triggers and hand-off
-- [ ] Phase 4: coverage and benchmark
-- [ ] Phase 5: public hiring snapshot page (stretch)
+- [x] Console 1: clean locations and the `lead_list` read surface
+- [ ] Console 2: the lead list page
+- [ ] Console 3: the company page
+- [ ] Console 4: contacts, found on demand
+- [ ] Console 5: the outreach funnel and the daily work queue
+- [ ] Console 6: health page, and a floor under `long_open`
+
+The original build pack's phases 4 and 5 (coverage benchmark, public snapshot page) are
+superseded. On 2026-09-30 the product became a lead list rather than a signal feed, and
+the console is how it is worked. Coverage benchmarking is still worth doing later; the
+public page is not currently planned.
 
 ## What the live sources actually do
 
@@ -96,6 +105,7 @@ Seven tables, defined in `supabase/migrations/`.
 | `runs` | One row per workflow run, for health checks |
 | `discovery_log` | Where each board name came from, for debugging coverage |
 | `settings` | Key/value state that is not about a company: the backfill marker and the last digest timestamp |
+| `lead_list` | A **view**, not a table. One row per company with its latest snapshot, stale-role counts and signals. The console's entire read surface |
 
 `companies` carries the lead fields: `display_name`, `domain` with a `domain_confidence`
 and `domain_source`, `top_country` / `top_locality` / `remote_share` derived from where
@@ -154,19 +164,22 @@ first time no company is left in `unverified`. Two things follow from that:
 - Setting it is never retroactive either, because the rule only fires for companies
   whose `first_seen_at` is later than the marker.
 
-### Hand-off
+### Why there is no longer a Clay push or a Slack digest
 
-The Clay push sends one row per unexported trigger to the table webhook and sets
-`exported_at` only for the rows Clay accepted, so a failure mid-run loses nothing. It
-is capped per run (`config.clay.maxPerRun`), which drains the first evaluation's
-backlog over a few days rather than dumping thousands of rows into Clay at once.
+Both were built in phase 3 and both are now decided against. The code and the npm
+scripts remain (`npm run clay`, `npm run digest`); neither runs on a schedule.
 
-The Slack digest goes out on Mondays as part of the same workflow, rather than on its
-own schedule, so it can never run before the day's triggers have been evaluated. Its
-window runs from the last digest sent, not a fixed seven days, so a missed Monday is
-caught up rather than skipped. Inside each type the most useful entries come first:
-companies in the 5-50 band outrank a 3,000-role job marketplace, which is otherwise
-what sorting on size alone puts at the top of every list.
+**Clay was dropped on 2026-10-01.** It had four jobs here: hold the list, segment it,
+resolve the missing domains, and find the contact. The console does the first two, the
+missing domains are being filled by hand, and Exa does the fourth better than Clay did:
+a single search returns the TA leader's name, exact title, seniority, LinkedIn URL and
+time in post, at $4 per 1,000 searches against $167 a month for the Clay tier that would
+hold 4,000 rows. Clay's free tier caps a table at 200 rows, and its API would not let us
+query on job title at all, so we had never actually proved it could do the one thing it
+was for.
+
+**The digest was never wanted.** A weekly summary is the wrong shape for a list worked by
+hand at twenty companies a week; the console's work queue is the right one.
 
 ## Running it
 
@@ -187,6 +200,62 @@ The trigger run is safe to repeat too. Every rule excludes companies that alread
 a trigger of that type inside the dedupe window, so a second run the same day finds
 nothing new.
 
+## The console
+
+A Next.js app in `web/`, deployed as its own Vercel project, gated by Vercel deployment
+protection rather than any login code of its own. One user, one password.
+
+**It reads one view and can write nothing.** `lead_list` is granted to `anon`; every base
+table keeps RLS enabled with no policies, so the anon role returns zero rows from
+`companies`, `jobs`, `snapshots`, `triggers` and `runs`, and cannot write to any of them.
+Verified by setting the role and trying. Writes the console needs (parking a company,
+moving a contact through the funnel) go through server actions with a narrow key, not
+through the view.
+
+`lead_list` is a plain view rather than `security_invoker`, deliberately. It runs with the
+owner's rights and so reads through the base tables' RLS, which means one shaped read-only
+surface is exposed instead of granting `anon` direct select on four tables and trying to
+narrow it back down afterwards.
+
+A realistic filtered query over the full 5,731 rows (UK, 5-50 roles, no in-house
+recruiter, sorted by open roles) plans in 3ms and executes in 34ms, all from shared
+buffers. No materialised view needed.
+
+### Locations, and why they needed cleaning first
+
+Country and city are the segmentation Luke asked for by name, so they had to be true
+before anything was built on them. Four faults, all fixed in migrations 0008 and 0009 for
+the history and in `src/enrich/location.ts` for every refresh from now on:
+
+- **One city under two names.** "New York City" on 425 companies and "New York" on 485
+  are one market shown as two. Same for Bangalore/Bengaluru, München/Munich,
+  Zürich/Zurich, Sao Paulo/São Paulo and four spellings of Washington DC. New York is now
+  572 companies in one place.
+- **A country in the city field.** "United States" was the fifth most common *city*, on
+  170 companies.
+- **A continent in either field.** "Europe", "Latin America", "LATAM", "North America".
+- **A remote policy in the country field.** "Any Location", "Remote - Global",
+  "Europe (CET +/- 1h)".
+
+Two things that look like the same fault and are not. Singapore, Hong Kong, Luxembourg,
+Gibraltar and Monaco are city-states where locality equalling country is correct, and a
+blanket rule would have binned 74 Singapore companies. And boroughs are left alone:
+Brooklyn is not folded into New York, South San Francisco not into San Francisco, because
+those are answers in their own right.
+
+The first attempt at the country-in-city rule compared the two fields, which missed the
+two companies whose city said "United States" while their country said "U.S.A" and
+"India". A country name in a city field is wrong whatever sits beside it, so the rule
+drops it outright. Worth remembering as the general shape of the mistake: the comparison
+felt safer and was simply narrower.
+
+After both migrations: 72 distinct countries, 465 distinct cities, zero junk values,
+3,588 companies with a country and 3,112 with a city.
+
+### Contacts
+
+Not built yet, and not until the paperwork is. See **Data rules** below.
+
 ## Rules for talking to Ashby
 
 - Max 1 request per second to `api.ashbyhq.com`
@@ -196,19 +265,32 @@ nothing new.
 
 ## Data rules
 
-**Company and job data only. Radar never stores a person.**
+**Company and job data only, until the paperwork says otherwise.**
 
-That is a decision, not a gap. Contacts matter for prospecting, and Clay holds them:
-Radar works out which companies are worth talking to and hands them over, Clay finds
-the person. Keeping people out of Radar means it never becomes a UK GDPR processing
-activity in its own right, and the personal data sits in the tool built for it.
+Phase 3's position was that Radar never stores a person and Clay holds the contacts. Half
+of that changed on 2026-10-01: Clay is gone, and Luke needs an outreach funnel tracked per
+contact, which means Radar will store people. That is a deliberate reversal, not a drift,
+and it carries conditions.
 
-Putting contacts in Radar would first need a written legitimate interests assessment,
-an Article 14 notice (the data would come from Clay, not from the person), a retention
-period and a suppression list that survives deletion. None of that exists, so neither
-does a contacts table.
+Before a contacts table exists, all of this has to:
 
-Job descriptions are not stored either. The refresh reads them to extract the company's
+- a written legitimate interests assessment (Article 6(1)(f))
+- an Article 14 notice, discharged in the first LinkedIn message via a link to a
+  prospecting privacy notice on candidhq.tech, since the data comes from a public profile
+  rather than from the person
+- a suppression list keyed on the LinkedIn profile URL, so a removal survives the next
+  lookup re-finding them
+- a stated retention period
+- a line in the record of processing activities
+
+CandidHQ's ICO registration (C1941533) covers the activity, since Radar is a CandidHQ
+prospecting tool. Data minimisation does the rest of the work: name, current title,
+LinkedIn URL and company, and nothing else. No email, no phone, no biography, no posts.
+
+Contacts are found on demand through Exa rather than crawled in bulk, so Radar holds a
+person only once Luke has decided to approach them.
+
+Job descriptions are still not stored. The refresh reads them to extract the company's
 own domain and discards them; only the hostname is kept.
 
 ## Secrets
@@ -219,8 +301,8 @@ All secrets live in GitHub Actions secrets. `.env.example` lists every one.
 | --- | --- |
 | `SUPABASE_URL` | every workflow |
 | `SUPABASE_SERVICE_ROLE_KEY` | every workflow |
-| `SLACK_WEBHOOK_URL` | the weekly digest. Without it the digest is rendered into the run log and the week is left unsent, so nothing is lost when the secret arrives |
-| `CLAY_WEBHOOK_URL` | the Clay hand-off. Without it nothing is pushed and nothing is marked exported |
+| `SLACK_WEBHOOK_URL` | the weekly digest, which no longer runs on a schedule. Never set |
+| `CLAY_WEBHOOK_URL` | the Clay hand-off, now retired. Never set, and deliberately so |
 
 The service-role key never leaves GitHub Actions and server-side env vars.
 
@@ -231,4 +313,5 @@ Every threshold and rate limit lives in `src/config.ts`. Tune there, not in the 
 ## Out of scope
 
 Other ATSs (Greenhouse, Lever, Workable) are designed for as a future `source` value but
-not built. Finding people or emails is Clay's job downstream. Radar never sends email.
+not built. Email addresses are out of scope: outreach is LinkedIn, by hand, using Luke's
+own profile. Radar never sends email.
