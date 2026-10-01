@@ -176,11 +176,12 @@ function Outcome({ result }: { result: Extract<LookupResult, { state: 'ok' }> })
 
   return (
     <p className="mt-2 text-[11px] text-[var(--ink-faint)]">
-      Exa returned {returned} {returned === 1 ? 'profile' : 'profiles'}
-      {withProfiles !== returned ? `, ${withProfiles} with structured history` : ''}.{' '}
+      {`Exa returned ${returned} ${returned === 1 ? 'profile' : 'profiles'}`}
+      {withProfiles !== returned ? `, ${withProfiles} with structured history` : ''}
+      {'. '}
       {candidates.length === 0 ? 'None survived the filters' : `${candidates.length} kept`}
-      {bits.length ? `; set aside ${bits.join(', ')}` : ''}. Nothing here is stored until
-      you press Add.
+      {bits.length ? `, set aside ${bits.join(', ')}` : ''}
+      {'. Nothing here is stored until you press Add.'}
     </p>
   );
 }
