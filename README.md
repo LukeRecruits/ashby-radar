@@ -607,6 +607,18 @@ Three blocks, in the order things fail:
   up here as a collapse in the last number rather than as an error anywhere.
 - **The data behind it**, then the last 25 runs for reading after something looks wrong.
 
+**A success is a run that finished with either nothing failed or more succeeded than
+failed.** The first definition was "zero failures", and the page went live reporting
+Discovery as having never succeeded: it has run once and swept 7,792 board names, with
+five Common Crawl index pages failing, which is that index server's documented normal
+behaviour and the entire reason there is a backoff ladder. A health page that cries wolf
+on day one is ignored by day three.
+
+The same definition would have broken worse later. The retention job reports `succeeded`
+as the number of contacts it deleted, so a month with nothing to delete finishes with
+zero and zero. Anything keyed on `succeeded > 0` would have shown it as permanently late,
+which is the health page inventing the exact failure it exists to detect. Migration 0022.
+
 ### Retention
 
 24 months from the last action on a contact, stated at
