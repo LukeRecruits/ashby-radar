@@ -2,11 +2,15 @@
  * A plain GET form. Submitting it navigates, so every filter combination is a URL, the
  * back button works, and a segment Luke wants again is a bookmark rather than six clicks.
  *
+ * Country, city, open roles and signal are tick-box dropdowns: several values in one
+ * filter widen it (UK or Ireland), different filters narrow each other.
+ *
  * `page` is deliberately not a field: changing a filter should return you to page one
  * rather than to page four of a list that no longer has four pages.
  */
 
-import { SIGNALS, SORTS, type Facet, type Filters } from '@/lib/leads';
+import { MultiSelect } from '@/components/MultiSelect';
+import { BANDS, SIGNALS, SORTS, type Facet, type Filters } from '@/lib/leads';
 
 const FIELD =
   'h-9 rounded-md border px-2 text-[13px] bg-[var(--panel)] border-[var(--line-strong)] ' +
@@ -37,40 +41,40 @@ export function FilterBar({
       className="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-3"
     >
       <div className="flex flex-wrap items-end gap-2">
-        <label className="min-w-0">
+        {/* Divs, not labels: a label around the dropdown would forward every click on
+            it to the first checkbox inside. */}
+        <div className="min-w-0">
           <Label>Country</Label>
-          <select name="country" defaultValue={filters.country} className={`${FIELD} max-w-[13rem]`}>
-            <option value="">Anywhere</option>
-            {countries.map((c) => (
-              <option key={c.value} value={c.value}>
-                {c.value} ({c.companies})
-              </option>
-            ))}
-          </select>
-        </label>
+          <MultiSelect
+            name="country"
+            options={countries.map((c) => ({ value: c.value, label: c.value, count: c.companies }))}
+            selected={filters.country}
+            anyLabel="Anywhere"
+            noun="countries"
+          />
+        </div>
 
-        <label className="min-w-0">
+        <div className="min-w-0">
           <Label>City</Label>
-          <select name="city" defaultValue={filters.city} className={`${FIELD} max-w-[13rem]`}>
-            <option value="">Any city</option>
-            {cities.map((c) => (
-              <option key={c.value} value={c.value}>
-                {c.value} ({c.companies})
-              </option>
-            ))}
-          </select>
-        </label>
+          <MultiSelect
+            name="city"
+            options={cities.map((c) => ({ value: c.value, label: c.value, count: c.companies }))}
+            selected={filters.city}
+            anyLabel="Any city"
+            noun="cities"
+          />
+        </div>
 
-        <label>
+        <div>
           <Label>Open roles</Label>
-          <select name="band" defaultValue={filters.band} className={FIELD}>
-            <option value="">Any size</option>
-            <option value="target">5 to 50</option>
-            <option value="small">1 to 4</option>
-            <option value="large">51 or more</option>
-            <option value="none">None open</option>
-          </select>
-        </label>
+          <MultiSelect
+            name="band"
+            options={BANDS.map((b) => ({ value: b.value, label: b.label }))}
+            selected={filters.band}
+            anyLabel="Any size"
+            noun="sizes"
+          />
+        </div>
 
         <label>
           <Label>Recruiter req</Label>
@@ -90,18 +94,19 @@ export function FilterBar({
           </select>
         </label>
 
-        <label>
+        <div>
           <Label>Signal</Label>
-          <select name="signal" defaultValue={filters.signal} className={FIELD}>
-            <option value="">Any or none</option>
-            {SIGNALS.map((s) => (
-              <option key={s.type} value={s.type}>
-                {s.label}
-              </option>
-            ))}
-            <option value="none">No signal yet</option>
-          </select>
-        </label>
+          <MultiSelect
+            name="signal"
+            options={[
+              ...SIGNALS.map((x) => ({ value: x.type, label: x.label })),
+              { value: 'none', label: 'No signal yet' },
+            ]}
+            selected={filters.signal}
+            anyLabel="Any or none"
+            noun="signals"
+          />
+        </div>
 
         <label className="min-w-0 flex-1">
           <Label>Search</Label>

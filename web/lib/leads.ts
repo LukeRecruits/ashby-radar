@@ -38,13 +38,27 @@ export const SORTS = {
 
 export type SortKey = keyof typeof SORTS;
 
+export const BANDS = [
+  { value: 'target', label: '5 to 50' },
+  { value: 'small', label: '1 to 4' },
+  { value: 'large', label: '51 or more' },
+  { value: 'none', label: 'None open' },
+] as const;
+
+export type Band = (typeof BANDS)[number]['value'];
+
+/**
+ * Country, city, band and signal take several values each. Within one filter the values
+ * are alternatives (UK or Ireland); across filters they narrow (UK or Ireland, AND 5 to
+ * 50 roles). An empty array means the filter is off.
+ */
 export type Filters = {
-  country: string;
-  city: string;
-  band: '' | 'small' | 'target' | 'large' | 'none';
+  country: string[];
+  city: string[];
+  band: Band[];
   ta: '' | 'none' | 'has';
   domain: '' | 'has' | 'missing';
-  signal: '' | 'none' | SignalType;
+  signal: ('none' | SignalType)[];
   q: string;
   parked: boolean;
   sort: SortKey;
@@ -89,27 +103,28 @@ function one(value: string | string[] | undefined): string {
   return (Array.isArray(value) ? value[0] : value)?.trim() ?? '';
 }
 
+/** Every value sent for a key, trimmed, de-duplicated, empties dropped. */
+function many(value: string | string[] | undefined): string[] {
+  const list = Array.isArray(value) ? value : value === undefined ? [] : [value];
+  return [...new Set(list.map((v) => v.trim()).filter(Boolean))].slice(0, 100);
+}
+
 /** Anything the caller sent that is not a known value becomes the default. */
 export function parseFilters(params: Record<string, string | string[] | undefined>): Filters {
-  const band = one(params.band);
   const ta = one(params.ta);
   const domain = one(params.domain);
-  const signal = one(params.signal);
   const sort = one(params.sort);
   const page = Number.parseInt(one(params.page), 10);
 
   return {
-    country: one(params.country),
-    city: one(params.city),
-    band: (['small', 'target', 'large', 'none'] as const).includes(band as 'small')
-      ? (band as Filters['band'])
-      : '',
+    country: many(params.country),
+    city: many(params.city),
+    band: many(params.band).filter((b): b is Band => BANDS.some((x) => x.value === b)),
     ta: ta === 'none' || ta === 'has' ? ta : '',
     domain: domain === 'has' || domain === 'missing' ? domain : '',
-    signal:
-      signal === 'none' || SIGNALS.some((s) => s.type === signal)
-        ? (signal as Filters['signal'])
-        : '',
+    signal: many(params.signal).filter(
+      (s): s is Filters['signal'][number] => s === 'none' || SIGNALS.some((x) => x.type === s),
+    ),
     q: one(params.q).slice(0, 80),
     parked: one(params.parked) === '1',
     sort: sort in SORTS ? (sort as SortKey) : 'roles',
@@ -142,15 +157,22 @@ export async function fetchLeads(
   // deliberate "no" never quietly reappears at the bottom of a list.
   if (!filters.parked) query = query.is('parked_at', null);
 
-  if (filters.country) query = query.eq('top_country', filters.country);
-  if (filters.city) query = query.eq('top_locality', filters.city);
-  if (filters.band) query = query.eq('role_band', filters.band);
+  if (filters.country.length) query = query.in('top_country', filters.country);
+  if (filters.city.length) query = query.in('top_locality', filters.city);
+  if (filters.band.length) query = query.in('role_band', filters.band);
   if (filters.ta) query = query.eq('has_in_house_ta', filters.ta === 'has');
   if (filters.domain === 'has') query = query.not('domain', 'is', null);
   if (filters.domain === 'missing') query = query.is('domain', null);
 
-  if (filters.signal === 'none') query = query.eq('signal_count', 0);
-  else if (filters.signal) query = query.not(`${filters.signal}_at`, 'is', null);
+  // Ticking several signals means "any of these". The values are from a fixed list
+  // (parseFilters drops anything else), so building the expression by hand is safe.
+  if (filters.signal.length) {
+    query = query.or(
+      filters.signal
+        .map((s) => (s === 'none' ? 'signal_count.eq.0' : `${s}_at.not.is.null`))
+        .join(','),
+    );
+  }
 
   const q = searchSafe(filters.q);
   if (q) query = query.or(`display_name.ilike.%${q}%,board_name.ilike.%${q}%`);
@@ -220,7 +242,11 @@ export async function fetchTotals(): Promise<{
 /** Rebuilds the query string, dropping empties so shared links stay readable. */
 export function toQuery(filters: Partial<Filters>): string {
   const params = new URLSearchParams();
-  const add = (key: string, value: string | number | boolean | undefined) => {
+  const add = (key: string, value: string | string[] | number | boolean | undefined) => {
+    if (Array.isArray(value)) {
+      for (const v of value) params.append(key, v);
+      return;
+    }
     if (value === undefined || value === '' || value === false) return;
     if (key === 'page' && value === 1) return;
     if (key === 'sort' && value === 'roles') return;
