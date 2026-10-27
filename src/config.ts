@@ -224,4 +224,28 @@ export const config = {
     /** Hard limit from the project rules: max 1 request per second. */
     requestDelayMs: 1_100,
   },
+
+  greenhouse: {
+    /**
+     * Greenhouse's public Job Board API. One host serves US and EU boards alike:
+     * boards-api.eu.greenhouse.io does not resolve, and EU board tokens answer here.
+     */
+    boardApiBase: 'https://boards-api.greenhouse.io/v1/boards',
+    /**
+     * The hosts a Greenhouse board lives on, all served by the one API above. Discovery
+     * mines all four. job-boards.* is the current board, boards.* the legacy one, which
+     * also carries the embed widget at /embed/job_board?for={token}.
+     */
+    boardHosts: [
+      'job-boards.greenhouse.io',
+      'boards.greenhouse.io',
+      'job-boards.eu.greenhouse.io',
+      'boards.eu.greenhouse.io',
+    ] as readonly string[],
+    /**
+     * Same politeness as Ashby: one request per second. Greenhouse publishes no limit
+     * for the board API. Its own limiter, so the two refreshes never share a budget.
+     */
+    requestDelayMs: 1_100,
+  },
 } as const;

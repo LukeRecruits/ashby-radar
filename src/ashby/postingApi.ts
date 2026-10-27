@@ -26,16 +26,16 @@
  */
 
 import { config } from '../config.ts';
-import {
-  candidatesFromDescriptions,
-  type DomainCandidate,
-} from '../enrich/domainGuess.ts';
+import { candidatesFromDescriptions } from '../enrich/domainGuess.ts';
 import {
   normaliseAddress,
   type NormalisedAddress,
   type RawAddress,
 } from '../enrich/location.ts';
+import type { BoardJob, BoardResult } from '../ats/types.ts';
 import { fetchWithRetry, HttpError } from '../lib/http.ts';
+
+export type { BoardJob, BoardResult };
 
 type CompensationComponent = {
   compensationType?: string | null;
@@ -71,36 +71,6 @@ type RawJob = {
   compensation?: RawCompensation | null;
 };
 
-export type BoardJob = {
-  ashbyJobId: string;
-  ashbyJobUrl: string;
-  title: string | null;
-  department: string | null;
-  team: string | null;
-  location: string | null;
-  isRemote: boolean | null;
-  workplaceType: string | null;
-  employmentType: string | null;
-  isListed: boolean | null;
-  publishedAt: string | null;
-  hasCompensation: boolean;
-  /** Structured address, normalised. Present on most jobs, never on all. */
-  address: NormalisedAddress;
-};
-
-export type BoardResult =
-  | {
-      found: true;
-      jobs: BoardJob[];
-      /**
-       * Company domains linked from the board's own job adverts, most-linked first.
-       * The descriptions themselves are read and thrown away: only the hostname is
-       * kept, so the "no job descriptions stored" rule still holds.
-       */
-      domainCandidates: DomainCandidate[];
-    }
-  | { found: false };
-
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** True when the company actually publishes pay on this job. */
@@ -126,8 +96,8 @@ function normalise(raw: RawJob, boardName: string): BoardJob | null {
   const id = raw.id?.trim();
   if (!id || !UUID.test(id)) return null;
   return {
-    ashbyJobId: id.toLowerCase(),
-    ashbyJobUrl:
+    externalJobId: id.toLowerCase(),
+    jobUrl:
       raw.jobUrl?.trim() ||
       `https://jobs.ashbyhq.com/${encodeURIComponent(boardName)}/${id}`,
     title: raw.title?.trim() || null,
@@ -175,13 +145,19 @@ export async function fetchBoard(boardName: string): Promise<BoardResult> {
     const job = normalise(raw, boardName);
     // A board has never repeated a job id in probing, but a duplicate would break the
     // upsert batch, so keep the first and drop the rest.
-    if (!job || seen.has(job.ashbyJobId)) continue;
-    seen.add(job.ashbyJobId);
+    if (!job || seen.has(job.externalJobId)) continue;
+    seen.add(job.externalJobId);
     jobs.push(job);
     if (raw.descriptionHtml) descriptions.push(raw.descriptionHtml);
   }
 
-  return { found: true, jobs, domainCandidates: candidatesFromDescriptions(descriptions) };
+  return {
+    found: true,
+    jobs,
+    domainCandidates: candidatesFromDescriptions(descriptions),
+    // Ashby's response carries no company name anywhere. See note 4 above.
+    companyName: null,
+  };
 }
 
 let recruiterPattern: RegExp | null = null;

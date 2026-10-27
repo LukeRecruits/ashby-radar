@@ -132,8 +132,8 @@ async function writeJobs(
     const { error } = await db.from('jobs').upsert(
       batch.map((job) => ({
         company_id: companyId,
-        ashby_job_id: job.ashbyJobId,
-        ashby_job_url: job.ashbyJobUrl,
+        ashby_job_id: job.externalJobId,
+        ashby_job_url: job.jobUrl,
         title: job.title,
         department: job.department,
         team: job.team,
@@ -157,7 +157,7 @@ async function writeJobs(
     if (error) throw new Error(`jobs upsert failed: ${error.message}`);
   }
 
-  const returned = new Set(jobs.map((job) => job.ashbyJobId));
+  const returned = new Set(jobs.map((job) => job.externalJobId));
   const goneIds = [...openNow].filter(([jobId]) => !returned.has(jobId)).map(([, id]) => id);
 
   for (const batch of chunk(goneIds, config.refresh.jobUpsertBatchSize)) {
@@ -165,7 +165,7 @@ async function writeJobs(
     if (error) throw new Error(`job close failed: ${error.message}`);
   }
 
-  const opened = jobs.filter((job) => !openNow.has(job.ashbyJobId)).length;
+  const opened = jobs.filter((job) => !openNow.has(job.externalJobId)).length;
   return { opened, closed: goneIds.length };
 }
 
