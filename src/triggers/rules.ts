@@ -18,6 +18,7 @@
  */
 
 import { isRecruiterRole } from '../ashby/postingApi.ts';
+import type { Source } from '../ats/types.ts';
 import { config } from '../config.ts';
 import { chunk, fetchAllPages } from '../lib/paginate.ts';
 import { supabase } from '../lib/supabase.ts';
@@ -77,7 +78,8 @@ export type RuleContext = {
   /** The UTC date the refresh wrote today's snapshots under. */
   runDate: string;
   /** Null until the initial verification pass has finished. */
-  backfillCompletedAt: string | null;
+  /** Per source; a source missing here fires no new_to_ashby. See migration 0023. */
+  backfillMarkers: Partial<Record<Source, string>>;
 };
 
 type Rule = {
@@ -92,11 +94,11 @@ const t = config.triggers;
 export const RULES: Rule[] = [
   {
     type: 'new_to_ashby',
-    describe: 'First successful check, for a company discovered after the backfill',
+    describe: 'First successful check, for a company discovered after its source\'s backfill',
     find: (ctx) =>
-      candidates('candidates_new_to_ashby', {
+      candidates('candidates_new_to_ats', {
         p_run_date: ctx.runDate,
-        p_backfill_completed_at: ctx.backfillCompletedAt,
+        p_markers: ctx.backfillMarkers,
         p_dedupe_days: t.dedupeDays,
       }),
   },

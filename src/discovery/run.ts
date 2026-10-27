@@ -40,6 +40,7 @@ async function upsertCompanies(names: string[]): Promise<number> {
 async function writeDiscoveryLog(hits: BoardHits, discoveredVia: string): Promise<void> {
   const db = supabase();
   const rows = [...hits].map(([board_name, hit]) => ({
+    source: 'ashby',
     board_name,
     source_url: hit.sourceUrl,
     discovered_via: discoveredVia,
@@ -50,7 +51,7 @@ async function writeDiscoveryLog(hits: BoardHits, discoveredVia: string): Promis
   for (const batch of chunk(rows, config.discovery.upsertBatchSize)) {
     const { error } = await db
       .from('discovery_log')
-      .upsert(batch, { onConflict: 'board_name,discovered_via' });
+      .upsert(batch, { onConflict: 'source,board_name,discovered_via' });
     if (error) throw new Error(`discovery_log upsert failed: ${error.message}`);
   }
 }

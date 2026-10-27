@@ -38,3 +38,14 @@ export async function getTimestamp(key: string): Promise<string | null> {
   const value = await getSetting<string>(key);
   return typeof value === 'string' ? value : null;
 }
+
+/**
+ * The backfill marker for one source. Ashby keeps the key it has had since phase 3;
+ * every later source gets its own, so its first verification pass cannot read as
+ * thousands of companies new to their ATS. See migration 0023.
+ */
+export function backfillKey(source: string): string {
+  return source === 'ashby'
+    ? SETTINGS.initialBackfillCompletedAt
+    : `${SETTINGS.initialBackfillCompletedAt}:${source}`;
+}

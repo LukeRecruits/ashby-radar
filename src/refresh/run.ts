@@ -11,9 +11,11 @@
  * snapshots can never double up.
  */
 
-import { fetchBoard, isRecruiterRole, type BoardJob } from '../ashby/postingApi.ts';
+import { isRecruiterRole } from '../ashby/postingApi.ts';
+import { clientFor, sourceFromEnv, workflowName } from '../ats/clients.ts';
+import type { BoardJob, BoardResult, Source } from '../ats/types.ts';
 import { config } from '../config.ts';
-import { pickDomain, type DomainCandidate } from '../enrich/domainGuess.ts';
+import { pickDomain } from '../enrich/domainGuess.ts';
 import { companyLocation } from '../enrich/location.ts';
 import { log } from '../lib/log.ts';
 import { chunk, fetchAllPages } from '../lib/paginate.ts';
@@ -21,7 +23,13 @@ import { createRateLimiter } from '../lib/rateLimiter.ts';
 import { finishRun, startRun } from '../lib/runs.ts';
 import { supabase } from '../lib/supabase.ts';
 
-const WORKFLOW = 'refresh';
+/**
+ * One source per run. Each ATS has its own workflow, schedule and rate limiter, so a slow
+ * Greenhouse night can never delay the Ashby refresh or share its request budget.
+ */
+const SOURCE: Source = sourceFromEnv();
+const WORKFLOW = workflowName('refresh', SOURCE);
+const client = clientFor(SOURCE);
 
 type Company = {
   id: string;
@@ -67,6 +75,7 @@ async function companiesDue(runStart: Date): Promise<Company[]> {
     db
       .from('companies')
       .select('id, board_name, status, display_name, domain')
+      .eq('source', SOURCE)
       .in('status', ['unverified', 'active', 'inactive'])
       .or(notCheckedToday)
       .order('id')
@@ -77,6 +86,7 @@ async function companiesDue(runStart: Date): Promise<Company[]> {
     db
       .from('companies')
       .select('id, board_name, status, display_name, domain')
+      .eq('source', SOURCE)
       .eq('status', 'not_found')
       .or(`last_checked_at.is.null,last_checked_at.lt.${recheckCutoff}`)
       .order('id')
@@ -119,20 +129,23 @@ async function writeJobs(
 
   const { data: existing, error: existingError } = await db
     .from('jobs')
-    .select('id, ashby_job_id')
+    .select('id, external_job_id')
     .eq('company_id', companyId)
     .is('closed_at', null);
   if (existingError) throw new Error(`open jobs query failed: ${existingError.message}`);
 
   const openNow = new Map<string, string>(
-    (existing ?? []).map((row) => [row.ashby_job_id as string, row.id as string]),
+    (existing ?? []).map((row) => [row.external_job_id as string, row.id as string]),
   );
 
   for (const batch of chunk(jobs, config.refresh.jobUpsertBatchSize)) {
     const { error } = await db.from('jobs').upsert(
       batch.map((job) => ({
         company_id: companyId,
-        ashby_job_id: job.externalJobId,
+        source: SOURCE,
+        external_job_id: job.externalJobId,
+        // Kept filled for Ashby, the one source whose ids are uuids. See migration 0023.
+        ashby_job_id: SOURCE === 'ashby' ? job.externalJobId : null,
         ashby_job_url: job.jobUrl,
         title: job.title,
         department: job.department,
@@ -152,7 +165,7 @@ async function writeJobs(
         // payload on purpose so the original sighting survives the update.
         closed_at: null,
       })),
-      { onConflict: 'ashby_job_id' },
+      { onConflict: 'source,external_job_id' },
     );
     if (error) throw new Error(`jobs upsert failed: ${error.message}`);
   }
@@ -207,10 +220,10 @@ async function updateCompany(
  */
 function leadFields(
   company: Company,
-  jobs: BoardJob[],
-  candidates: DomainCandidate[],
+  board: Extract<BoardResult, { found: true }>,
   now: string,
 ): Record<string, unknown> {
+  const { jobs, domainCandidates: candidates } = board;
   const where = companyLocation(jobs);
   const patch: Record<string, unknown> = {
     top_country: where.country,
@@ -219,8 +232,17 @@ function leadFields(
     domain_candidates: candidates,
   };
 
+  // A name the ATS supplies fills an empty display_name and never overwrites one, for
+  // the same reason as the domain below: a name corrected by hand outranks the feed.
+  const displayName = company.display_name ?? board.companyName;
+  if (!company.display_name && board.companyName) {
+    patch.display_name = board.companyName;
+    patch.name_source = `${SOURCE}_api`;
+    patch.name_checked_at = now;
+  }
+
   if (!company.domain) {
-    const picked = pickDomain(candidates, company.display_name, config.enrich.minDomainScore);
+    const picked = pickDomain(candidates, displayName, config.enrich.minDomainScore);
     if (picked) {
       patch.domain = picked.domain;
       patch.domain_confidence = picked.confidence;
@@ -237,7 +259,7 @@ async function checkCompany(
   snapshotDate: string,
   now: string,
 ): Promise<{ outcome: Outcome; opened: number; closed: number }> {
-  const board = await fetchBoard(company.board_name);
+  const board = await client.fetchBoard(company.board_name);
 
   if (!board.found) {
     // A 404 is not proof the name was junk. Ordinary company names 404 because they are
@@ -265,7 +287,7 @@ async function checkCompany(
     status: 'active',
     last_checked_at: now,
     last_active_at: now,
-    ...leadFields(company, board.jobs, board.domainCandidates, now),
+    ...leadFields(company, board, now),
   });
 
   return {
@@ -305,11 +327,16 @@ async function main(): Promise<void> {
         count: skipped.length,
       });
     }
-    log.info('companies due', { due: due.length, checking: unique.length, snapshotDate });
+    log.info('companies due', {
+      source: SOURCE,
+      due: due.length,
+      checking: unique.length,
+      snapshotDate,
+    });
 
     // One shared limiter across every worker, so Ashby still sees one request per
     // second no matter how many companies are in flight.
-    const ashbySlot = createRateLimiter(config.ashby.requestDelayMs);
+    const atsSlot = createRateLimiter(client.requestDelayMs);
     let cursor = 0;
     let done = 0;
 
@@ -319,7 +346,7 @@ async function main(): Promise<void> {
         const company = unique[index];
         if (!company) return;
 
-        await ashbySlot();
+        await atsSlot();
         try {
           const result = await checkCompany(company, snapshotDate, new Date().toISOString());
           tally[result.outcome] += 1;
@@ -351,6 +378,7 @@ async function main(): Promise<void> {
     const succeeded = checked - tally.failed;
     const notes = JSON.stringify(
       {
+        source: SOURCE,
         snapshotDate,
         due: due.length,
         limit: limit > 0 ? limit : null,

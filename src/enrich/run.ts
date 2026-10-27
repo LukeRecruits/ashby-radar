@@ -47,12 +47,16 @@ function limitFrom(name: string, fallback: number): number {
   return raw > 0 ? Math.min(raw, fallback) : fallback;
 }
 
-/** Companies we have never successfully read a name for. */
+/**
+ * Companies we have never successfully read a name for. Ashby only: the name comes off
+ * Ashby's own board page, and Greenhouse hands the refresh a company name in its API.
+ */
 async function needingName(): Promise<Company[]> {
   return fetchAllPages<Company>('companies', config.enrich.companyPageSize, (from, to) =>
     supabase()
       .from('companies')
       .select(SELECT)
+      .eq('source', 'ashby')
       .in('status', ['active', 'unverified'])
       .is('display_name', null)
       .is('name_checked_at', null)

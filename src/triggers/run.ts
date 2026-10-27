@@ -13,7 +13,8 @@ import { config } from '../config.ts';
 import { log } from '../lib/log.ts';
 import { chunk } from '../lib/paginate.ts';
 import { finishRun, startRun } from '../lib/runs.ts';
-import { SETTINGS, getTimestamp, setSetting } from '../lib/settings.ts';
+import { SOURCES, type Source } from '../ats/types.ts';
+import { backfillKey, getTimestamp, setSetting } from '../lib/settings.ts';
 import { supabase } from '../lib/supabase.ts';
 import { RULES, type Candidate, type TriggerType } from './rules.ts';
 
@@ -24,33 +25,44 @@ function todayUtc(): string {
 }
 
 /**
- * The backfill is over the moment no discovered board is still waiting for its first
- * check. Marking it here rather than by hand means new_to_ashby cannot be armed early,
- * and because it only fires for companies first seen *after* the marker, setting it can
- * never retroactively flag the 5,731 companies the backfill just verified.
+ * A source's backfill is over the moment none of its discovered boards is still waiting
+ * for a first check. Marking it here rather than by hand means new_to_ashby cannot be
+ * armed early, and because it only fires for companies first seen *after* the marker,
+ * setting it can never retroactively flag the companies the backfill just verified.
+ *
+ * One marker per source. A source with no companies at all is not "backfilled", it is
+ * not started: arming it then would let its whole first discovery fire as new.
  */
-async function backfillMarker(): Promise<string | null> {
-  const existing = await getTimestamp(SETTINGS.initialBackfillCompletedAt);
+async function backfillMarker(source: Source): Promise<string | null> {
+  const key = backfillKey(source);
+  const existing = await getTimestamp(key);
   if (existing) return existing;
 
-  const { count, error } = await supabase()
+  const db = supabase();
+  const total = await db
     .from('companies')
     .select('id', { count: 'exact', head: true })
+    .eq('source', source);
+  if (total.error) throw new Error(`${source} company count failed: ${total.error.message}`);
+  const waiting = await db
+    .from('companies')
+    .select('id', { count: 'exact', head: true })
+    .eq('source', source)
     .eq('status', 'unverified');
-  if (error) throw new Error(`unverified count failed: ${error.message}`);
+  if (waiting.error) throw new Error(`${source} unverified count failed: ${waiting.error.message}`);
 
-  if ((count ?? 0) > 0) {
-    log.info('initial backfill still running, new_to_ashby stays off', {
-      unverified: count,
+  if ((total.count ?? 0) === 0 || (waiting.count ?? 0) > 0) {
+    log.info('backfill not finished, new_to_ashby stays off for this source', {
+      source,
+      companies: total.count,
+      unverified: waiting.count,
     });
     return null;
   }
 
   const now = new Date().toISOString();
-  await setSetting(SETTINGS.initialBackfillCompletedAt, now);
-  log.info('initial backfill complete, new_to_ashby armed for companies found after', {
-    at: now,
-  });
+  await setSetting(key, now);
+  log.info('backfill complete, new_to_ashby armed for companies found after', { source, at: now });
   return now;
 }
 
@@ -80,8 +92,12 @@ async function main(): Promise<void> {
   const problems: string[] = [];
 
   try {
-    const backfillCompletedAt = await backfillMarker();
-    const ctx = { runDate, backfillCompletedAt };
+    const backfillMarkers: Partial<Record<Source, string>> = {};
+    for (const source of SOURCES) {
+      const marker = await backfillMarker(source);
+      if (marker) backfillMarkers[source] = marker;
+    }
+    const ctx = { runDate, backfillMarkers };
 
     // Sequential on purpose. Each rule is one heavy query over every active company,
     // and running them one at a time keeps the database out of trouble for the sake of
@@ -104,7 +120,7 @@ async function main(): Promise<void> {
     const notes = JSON.stringify(
       {
         runDate,
-        backfillCompletedAt,
+        backfillMarkers,
         fired,
         total,
         problems,
