@@ -12,7 +12,7 @@ version at https://candidhq.tech/privacy/prospecting.
 
 | Field | Value |
 | --- | --- |
-| Activity | Identifying and approaching the talent-acquisition lead at a company that uses Ashby |
+| Activity | Identifying and approaching the talent-acquisition lead at a company that uses Ashby or Greenhouse |
 | Controller | Candid HQ Limited, registered in Scotland. ICO registration C1941533 |
 | Contact | privacy@candidhq.tech |
 | Processor / system | Ashby Radar (`LukeRecruits/ashby-radar`), a CandidHQ internal tool |

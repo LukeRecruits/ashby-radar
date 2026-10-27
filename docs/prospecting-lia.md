@@ -2,10 +2,13 @@
 
 **Controller:** Candid HQ Limited, registered in Scotland. ICO registration C1941533.
 **Contact:** privacy@candidhq.tech
-**Processing:** identifying the talent-acquisition lead at a company that uses Ashby, and
-approaching them on LinkedIn about CandidHQ.
+**Processing:** identifying the talent-acquisition lead at a company that uses Ashby or
+Greenhouse, and approaching them on LinkedIn about CandidHQ.
 **Lawful basis relied on:** Article 6(1)(f) UK GDPR, legitimate interests.
 **Assessed:** 1 October 2026. **Review:** 1 October 2027, or sooner if the processing changes.
+**Revised:** 27 October 2026, to add companies using Greenhouse. The people, the four
+fields, the channel and the safeguards are unchanged; only the pool of companies grew, so
+the balance below still holds.
 **Assessed by:** Luke Eaton, sole operator.
 
 This is the whole record. It is deliberately short, because the processing is narrow: one
@@ -14,7 +17,7 @@ person, four fields, one professional network, no email and no automation.
 ## 1. Purpose test: is there a legitimate interest?
 
 Yes. CandidHQ sells candidate-experience software to in-house recruiting teams. Ashby
-Radar finds companies using Ashby, qualifies them on their own published hiring activity,
+Radar finds companies using Ashby or Greenhouse, qualifies them on their own published hiring activity,
 and the next step is a conversation with the person who owns talent acquisition there.
 Knowing who that person is, is the only way to have it.
 
