@@ -243,10 +243,15 @@ export const config = {
       'boards.eu.greenhouse.io',
     ] as readonly string[],
     /**
-     * Same politeness as Ashby: one request per second. Greenhouse publishes no limit
-     * for the board API. Its own limiter, so the two refreshes never share a budget.
+     * Greenhouse publishes no limit for the board API, which sits behind CloudFront and
+     * exists to serve embedded job boards. 350 requests at one a second on 2026-10-27
+     * drew no 429 and no rate-limit headers. A board costs two requests (jobs and
+     * departments), so at one a second ~10,000 live boards would need over six hours,
+     * past GitHub's job limit; at this pace it is about three. Its own limiter, so the
+     * two refreshes never share a budget. If 429s appear in the run notes, raise this
+     * before anything else.
      */
-    requestDelayMs: 1_100,
+    requestDelayMs: 600,
     /**
      * Fetch /departments alongside /jobs. The plain jobs list carries no departments, and
      * the alternative, content=true, is about sixteen times the bytes. Off means one
