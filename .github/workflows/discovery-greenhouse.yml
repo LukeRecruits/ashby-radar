@@ -6,6 +6,10 @@ on:
     # hit Common Crawl's index server at the same time: this run stops itself within
     # 5 hours, a full 19 hours before Ashby's starts.
     - cron: '0 3 * * 6'
+    # One-off: the second half of the first Wayback sweep, 2026-10-27 18:00 UTC, so it
+    # does not wait for Saturday. If the first run is still going, the concurrency group
+    # below queues this behind it. Cron has no year, so delete this line after it fires.
+    - cron: '0 18 27 10 *'
   workflow_dispatch:
 
 concurrency:
