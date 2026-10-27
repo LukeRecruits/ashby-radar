@@ -1,0 +1,39 @@
+name: discovery-greenhouse
+
+on:
+  schedule:
+    # Weekly, Saturday 03:00 UTC. A day before Ashby's Sunday sweep, so the two never
+    # hit Common Crawl's index server at the same time: this run stops itself within
+    # 5 hours, a full 19 hours before Ashby's starts.
+    - cron: '0 3 * * 6'
+  workflow_dispatch:
+
+concurrency:
+  group: discovery-greenhouse
+  cancel-in-progress: false
+
+jobs:
+  discovery-greenhouse:
+    runs-on: ubuntu-latest
+    # The run stops itself at config.discovery.greenhouseRunBudgetMinutes (300) and
+    # resumes the Wayback walk next week. This ceiling is above that budget, so a run
+    # is never killed before it has written what it found.
+    timeout-minutes: 345
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - name: Run discovery
+        env:
+          RADAR_SOURCE: greenhouse
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: npm run discovery

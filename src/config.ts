@@ -29,6 +29,27 @@ export const config = {
     retryBaseDelayMs: 3_000,
     /** Rows per Supabase upsert batch. */
     upsertBatchSize: 500,
+
+    /**
+     * Greenhouse discovery only. Its sweep is about ten times Ashby's: roughly 190
+     * Common Crawl pages and 518 Wayback pages, against Ashby's 12 and 53. At 10 to 45
+     * seconds a Wayback page that is 4 to 6 hours on its own, and a GitHub Actions job
+     * dies at 6 hours, and a killed run writes nothing. So the run stops itself with room
+     * to spare and the next run resumes the Wayback walk from where this one stopped,
+     * which makes a full Wayback cycle about two weekly runs. Common Crawl, where new
+     * boards show up, is swept in full every week. The workflow timeout sits above this.
+     */
+    greenhouseRunBudgetMinutes: 300,
+    /** Common Crawl goes first and may use at most this much of the budget. */
+    greenhouseCommonCrawlBudgetMinutes: 120,
+    /** Wayback page-mode requests take 10 to 45 seconds each; this is the gap between. */
+    greenhouseWaybackDelayMs: 2_000,
+    /**
+     * Give up on a source after this many failed requests in a row. Both index servers
+     * signal throttling with empty or HTML bodies on a 200, and pressing on only makes it
+     * worse. The Wayback walk resumes at the first refused page next run.
+     */
+    greenhouseMaxConsecutiveFailures: 4,
   },
 
   refresh: {

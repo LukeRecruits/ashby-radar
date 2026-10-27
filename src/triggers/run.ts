@@ -13,6 +13,7 @@ import { config } from '../config.ts';
 import { log } from '../lib/log.ts';
 import { chunk } from '../lib/paginate.ts';
 import { finishRun, startRun } from '../lib/runs.ts';
+import { workflowName } from '../ats/clients.ts';
 import { SOURCES, type Source } from '../ats/types.ts';
 import { backfillKey, getTimestamp, setSetting } from '../lib/settings.ts';
 import { supabase } from '../lib/supabase.ts';
@@ -51,11 +52,19 @@ async function backfillMarker(source: Source): Promise<string | null> {
     .eq('status', 'unverified');
   if (waiting.error) throw new Error(`${source} unverified count failed: ${waiting.error.message}`);
 
-  if ((total.count ?? 0) === 0 || (waiting.count ?? 0) > 0) {
+  // Greenhouse's Wayback sweep is too big for one run and resumes from a cursor, so its
+  // first discovery spans about two weeks. Arming on the first week's names would let
+  // the second week's arrive as thousands of companies "new" to Greenhouse. A source
+  // other than Ashby therefore also waits for a finished discovery run whose cursor
+  // says the sweep went all the way round.
+  const swept = source === 'ashby' || (await discoveryCycleComplete(source));
+
+  if ((total.count ?? 0) === 0 || (waiting.count ?? 0) > 0 || !swept) {
     log.info('backfill not finished, new_to_ashby stays off for this source', {
       source,
       companies: total.count,
       unverified: waiting.count,
+      discoveryCycleComplete: swept,
     });
     return null;
   }
@@ -64,6 +73,29 @@ async function backfillMarker(source: Source): Promise<string | null> {
   await setSetting(key, now);
   log.info('backfill complete, new_to_ashby armed for companies found after', { source, at: now });
   return now;
+}
+
+/** True once some finished discovery run for this source left no Wayback cursor. */
+async function discoveryCycleComplete(source: Source): Promise<boolean> {
+  const { data, error } = await supabase()
+    .from('runs')
+    .select('notes')
+    .eq('workflow', workflowName('discovery', source))
+    .not('finished_at', 'is', null)
+    .order('started_at', { ascending: false })
+    .limit(20);
+  if (error) throw new Error(`${source} discovery runs read failed: ${error.message}`);
+  return (data ?? []).some((row) => {
+    try {
+      const notes = JSON.parse(String(row.notes ?? '')) as {
+        fatal?: unknown;
+        wayback?: { nextCursor?: unknown };
+      };
+      return !notes.fatal && notes.wayback !== undefined && notes.wayback.nextCursor === null;
+    } catch {
+      return false;
+    }
+  });
 }
 
 async function insertTriggers(type: TriggerType, found: Candidate[]): Promise<number> {
