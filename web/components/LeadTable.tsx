@@ -10,10 +10,10 @@
  * blank until the snapshot history is a month deep, which is honest.
  */
 
-import { SIGNALS, type Lead } from '@/lib/leads';
+import { SIGNALS, atsLabel, type Lead } from '@/lib/leads';
 
 /**
- * The company name opens the company page rather than the Ashby board, because the page is
+ * The company name opens the company page rather than the job board, because the page is
  * where the decision gets made and the board is one click further on from there.
  *
  * `from` carries the whole path back, not just the query string, because there are two
@@ -105,6 +105,7 @@ export function LeadTable({
         <tbody>
           {rows.map((lead) => {
             const signals = signalsOf(lead);
+            const ats = atsLabel(lead.source);
             return (
               <tr
                 key={lead.id}
@@ -123,10 +124,12 @@ export function LeadTable({
                       target="_blank"
                       rel="noreferrer noopener"
                       className="hover:text-[var(--accent)] hover:underline"
-                      title="The Ashby job board"
+                      title={`The ${ats} job board`}
                     >
                       Board
                     </a>
+                    {/* Quiet on purpose: which ATS is a fact about the row, not a signal. */}
+                    <span title={`On ${ats}`}>{ats}</span>
                     {lead.domain ? (
                       <a
                         href={`https://${lead.domain}`}
@@ -135,7 +138,7 @@ export function LeadTable({
                         className="hover:text-[var(--accent)] hover:underline"
                         title={
                           lead.domain_confidence === 100
-                            ? 'Proved: their careers page links back to this Ashby board'
+                            ? `Proved: their careers page links back to this ${ats} board`
                             : `Matched on name, confidence ${lead.domain_confidence}`
                         }
                       >

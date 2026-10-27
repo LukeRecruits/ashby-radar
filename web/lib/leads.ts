@@ -28,11 +28,28 @@ export const SIGNALS: { type: SignalType; label: string; hint: string }[] = [
   { type: 'new_to_ashby', label: 'New', hint: 'First successful check since the backfill' },
 ];
 
+/**
+ * The applicant tracking systems Radar reads. `companies.source` holds the value; the
+ * label is what the console says. The internal names that predate Greenhouse
+ * (`new_to_ashby`, `ashby_job_url`) are kept in the schema and mean "its ATS".
+ */
+export const ATS = [
+  { value: 'ashby', label: 'Ashby' },
+  { value: 'greenhouse', label: 'Greenhouse' },
+] as const;
+
+export type Source = (typeof ATS)[number]['value'];
+
+/** The name to print for a company's ATS. An unknown value prints as itself. */
+export function atsLabel(source: string | null | undefined): string {
+  return ATS.find((a) => a.value === source)?.label ?? source ?? 'ATS';
+}
+
 export const SORTS = {
   roles: { label: 'Most open roles', column: 'open_roles', ascending: false },
   stale: { label: 'Most stalled roles', column: 'stale_roles_120', ascending: false },
   growth: { label: 'Fastest growing', column: 'open_roles_change_30d', ascending: false },
-  newest: { label: 'Newest to Ashby', column: 'first_seen_at', ascending: false },
+  newest: { label: 'Newest found', column: 'first_seen_at', ascending: false },
   name: { label: 'Name', column: 'label', ascending: true },
 } as const;
 
@@ -48,11 +65,12 @@ export const BANDS = [
 export type Band = (typeof BANDS)[number]['value'];
 
 /**
- * Country, city, band and signal take several values each. Within one filter the values
+ * ATS, country, city, band and signal take several values each. Within one filter the values
  * are alternatives (UK or Ireland); across filters they narrow (UK or Ireland, AND 5 to
  * 50 roles). An empty array means the filter is off.
  */
 export type Filters = {
+  ats: Source[];
   country: string[];
   city: string[];
   band: Band[];
@@ -70,6 +88,7 @@ export type Lead = {
   label: string;
   board_name: string;
   board_url: string;
+  source: string;
   domain: string | null;
   domain_confidence: number | null;
   top_country: string | null;
@@ -93,7 +112,7 @@ export type Lead = {
 };
 
 const COLUMNS =
-  'id, label, board_name, board_url, domain, domain_confidence, top_country, ' +
+  'id, label, board_name, board_url, source, domain, domain_confidence, top_country, ' +
   'top_locality, remote_share, open_roles, recruiter_roles, roles_with_pay, ' +
   'open_roles_change_30d, stale_roles_120, signal_count, first_seen_at, parked_at, ' +
   'parked_reason, new_to_ashby_at, hiring_spike_at, first_recruiter_at, ' +
@@ -117,6 +136,7 @@ export function parseFilters(params: Record<string, string | string[] | undefine
   const page = Number.parseInt(one(params.page), 10);
 
   return {
+    ats: many(params.ats).filter((a): a is Source => ATS.some((x) => x.value === a)),
     country: many(params.country),
     city: many(params.city),
     band: many(params.band).filter((b): b is Band => BANDS.some((x) => x.value === b)),
@@ -157,6 +177,8 @@ export async function fetchLeads(
   // deliberate "no" never quietly reappears at the bottom of a list.
   if (!filters.parked) query = query.is('parked_at', null);
 
+  // No ATS ticked means both, the same as every other multi filter being off.
+  if (filters.ats.length) query = query.in('source', filters.ats);
   if (filters.country.length) query = query.in('top_country', filters.country);
   if (filters.city.length) query = query.in('top_locality', filters.city);
   if (filters.band.length) query = query.in('role_band', filters.band);
@@ -252,6 +274,7 @@ export function toQuery(filters: Partial<Filters>): string {
     if (key === 'sort' && value === 'roles') return;
     params.set(key, value === true ? '1' : String(value));
   };
+  add('ats', filters.ats);
   add('country', filters.country);
   add('city', filters.city);
   add('band', filters.band);

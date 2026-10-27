@@ -2,7 +2,7 @@
  * A plain GET form. Submitting it navigates, so every filter combination is a URL, the
  * back button works, and a segment Luke wants again is a bookmark rather than six clicks.
  *
- * Country, city, open roles and signal are tick-box dropdowns: several values in one
+ * ATS, country, city, open roles and signal are tick-box dropdowns: several values in one
  * filter widen it (UK or Ireland), different filters narrow each other.
  *
  * `page` is deliberately not a field: changing a filter should return you to page one
@@ -10,7 +10,7 @@
  */
 
 import { MultiSelect } from '@/components/MultiSelect';
-import { BANDS, SIGNALS, SORTS, type Facet, type Filters } from '@/lib/leads';
+import { ATS, BANDS, SIGNALS, SORTS, type Facet, type Filters } from '@/lib/leads';
 
 const FIELD =
   'h-9 rounded-md border px-2 text-[13px] bg-[var(--panel)] border-[var(--line-strong)] ' +
@@ -43,6 +43,17 @@ export function FilterBar({
       <div className="flex flex-wrap items-end gap-2">
         {/* Divs, not labels: a label around the dropdown would forward every click on
             it to the first checkbox inside. */}
+        <div>
+          <Label>ATS</Label>
+          <MultiSelect
+            name="ats"
+            options={ATS.map((a) => ({ value: a.value, label: a.label }))}
+            selected={filters.ats}
+            anyLabel="Any ATS"
+            noun="ATSs"
+          />
+        </div>
+
         <div className="min-w-0">
           <Label>Country</Label>
           <MultiSelect
@@ -154,7 +165,7 @@ export function FilterBar({
           <span className="nums text-[var(--ink-soft)]">
             {resultCount.toLocaleString('en-GB')} matching
           </span>
-          <a href="/" className="text-[var(--accent)] hover:underline">
+          <a href="/leads" className="text-[var(--accent)] hover:underline">
             Clear all
           </a>
         </div>

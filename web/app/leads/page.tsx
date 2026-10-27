@@ -64,11 +64,11 @@ export default async function Page({
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Ashby Radar</h1>
           <p className="mt-0.5 text-[13px] text-[var(--ink-soft)]">
-            Companies running Ashby, and which of them are worth a conversation.
+            Companies running Ashby or Greenhouse, and which of them are worth a conversation.
           </p>
         </div>
         <div className="flex gap-7">
-          <Total value={totals.live} label="Live boards" hint="Active on Ashby today" />
+          <Total value={totals.live} label="Live boards" hint="Active on their ATS today, Ashby and Greenhouse together" />
           <Total
             value={totals.prospects}
             label="Contactable"
