@@ -1,7 +1,7 @@
 # Ashby Radar
 
-Finds every company using Ashby as its ATS, reads their open jobs every day, and flags
-hiring signals.
+Finds every company using Ashby or Greenhouse as its ATS, reads their open jobs every day,
+and flags hiring signals. Greenhouse joined on 2026-10-27; see **Greenhouse** below.
 
 It is a prospecting tool for CandidHQ, but it is a completely separate product: its own
 repo, its own Supabase project, its own Vercel project. No CandidHQ code, packages, env
@@ -25,7 +25,9 @@ Three scheduled GitHub Actions workflows do all the work. Supabase holds all sta
 
 | Workflow | Schedule | Does |
 | --- | --- | --- |
-| `discovery` | Weekly, Sun 03:00 UTC | Mines Common Crawl and Wayback for new board names |
+| `discovery` | Weekly, Sun 03:00 UTC | Mines Common Crawl and Wayback for new Ashby board names |
+| `discovery-greenhouse` | Weekly, Sat 03:00 UTC | The same for Greenhouse's four board hosts. Wayback resumes from a cursor across runs |
+| `refresh-greenhouse` | Daily, 00:30 UTC | The refresh, for Greenhouse boards, on its own rate limiter |
 | `enrich` | Weekly, Sun 06:30 UTC | Company names from board pages, then domain resolution |
 | `refresh` | Daily, 05:00 UTC | Calls the posting API for every company, writes jobs and a daily snapshot |
 | `triggers` | Daily, 07:15 UTC | Evaluates the six rules and writes signals |
@@ -43,6 +45,7 @@ Three scheduled GitHub Actions workflows do all the work. Supabase holds all sta
 - [x] Console 4: contacts, found on demand
 - [x] Console 5: the outreach funnel and the daily work queue
 - [x] Console 6: health page, and a floor under `long_open`
+- [x] Greenhouse G0-G4: a second source, through to the console (2026-10-27)
 
 The original build pack's phases 4 and 5 (coverage benchmark, public snapshot page) are
 superseded. On 2026-09-30 the product became a lead list rather than a signal feed, and
@@ -682,8 +685,43 @@ The service-role key never leaves GitHub Actions and server-side env vars.
 
 Every threshold and rate limit lives in `src/config.ts`. Tune there, not in the logic.
 
+## Greenhouse
+
+Added 2026-10-27. Everything downstream of the client is shared: snapshots, the six rules,
+every view and the console. A source is a value in `companies.source` and `jobs.source`,
+and each run takes `RADAR_SOURCE`. Ashby's runs keep their bare workflow names; others
+record as `discovery-greenhouse`, `refresh-greenhouse`.
+
+Schema (migration 0023): jobs are keyed on `(source, external_job_id)`. `ashby_job_id`
+stays, null for Greenhouse, and `ashby_job_url` is the posting URL for every source, a
+misleading name kept for the same reason as `has_in_house_ta`: six trigger functions read
+it and their bodies are stored as text, so a rename would not follow. The `new_to_ashby`
+trigger type now means "new to its ATS"; it reads one backfill marker per source, and
+Greenhouse's also waits for a discovery run that swept all of Wayback, because that sweep
+spans about two weekly runs and arming early would fire every late arrival as new.
+`health_summary` is one row per source (0024).
+
+What the Greenhouse sources do that their docs do not say. The full list is in the header
+of `src/greenhouse/boardApi.ts` and `src/discovery/greenhouseToken.ts`.
+
+- One API host, `boards-api.greenhouse.io`, serves US and EU boards. The EU API host
+  does not resolve.
+- Tokens are case-insensitive and stored lowercase. Unlike Ashby, the API does not echo
+  your spelling. Tokens can contain `()&!~+` and digits only: `1pyra)mid_health&care` is
+  Pyramid Healthcare's live board.
+- The plain jobs list has no departments; `content=true` adds them at about 16x the bytes,
+  so a board is two light calls, jobs and `/departments`. Pay needs `pay_transparency=true`.
+- `company_name` is on every job, so an empty board needs one more call for its name.
+- Location is free text only. `src/greenhouse/location.ts` parses it through the same
+  normalisers as Ashby; about 84% of jobs get a country, and none wrong in read-back.
+  Workplace type is stated on only ~18% (from metadata or the text), so remote share is
+  thinner than Ashby's. "City or Remote" counts as not stated.
+- 21% of postings share a requisition (`internal_job_id`). Each posting is its own job, so
+  open-role counts are posting counts, as they are for Ashby.
+- Paced at about two requests a second (`config.greenhouse.requestDelayMs`), because a
+  board is two requests and ~10,000 boards at one a second does not fit in a GitHub job.
+
 ## Out of scope
 
-Other ATSs (Greenhouse, Lever, Workable) are designed for as a future `source` value but
-not built. Email addresses are out of scope: outreach is LinkedIn, by hand, using Luke's
+Other ATSs (Lever, Workable) are designed for as a future `source` value but not built. Email addresses are out of scope: outreach is LinkedIn, by hand, using Luke's
 own profile. Radar never sends email.
