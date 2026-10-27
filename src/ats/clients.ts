@@ -6,10 +6,19 @@
 
 import { fetchBoard as fetchAshbyBoard } from '../ashby/postingApi.ts';
 import { config } from '../config.ts';
+import {
+  fetchBoard as fetchGreenhouseBoard,
+  fetchBoardName as fetchGreenhouseBoardName,
+} from '../greenhouse/boardApi.ts';
 import type { BoardResult, Source } from './types.ts';
 
 export type AtsClient = {
-  fetchBoard: (boardName: string) => Promise<BoardResult>;
+  /**
+   * Reads one board. `pace` is the source's shared rate limiter and the client calls it
+   * before every request it makes, because a board is one request on Ashby and two or
+   * three on Greenhouse, and every one of them counts against the budget.
+   */
+  fetchBoard: (boardName: string, pace: () => Promise<void>) => Promise<BoardResult>;
   /** Gap between two requests to this ATS. Each source gets its own limiter. */
   requestDelayMs: number;
 };
@@ -17,9 +26,15 @@ export type AtsClient = {
 export function clientFor(source: Source): AtsClient {
   switch (source) {
     case 'ashby':
-      return { fetchBoard: fetchAshbyBoard, requestDelayMs: config.ashby.requestDelayMs };
+      return {
+        fetchBoard: async (boardName, pace) => {
+          await pace();
+          return fetchAshbyBoard(boardName);
+        },
+        requestDelayMs: config.ashby.requestDelayMs,
+      };
     case 'greenhouse':
-      throw new Error('the Greenhouse client is not wired in yet');
+      return { fetchBoard: fetchGreenhouse, requestDelayMs: config.greenhouse.requestDelayMs };
   }
 }
 
@@ -38,4 +53,22 @@ export function sourceFromEnv(): Source {
     throw new Error(`RADAR_SOURCE must be ashby or greenhouse, not "${raw}"`);
   }
   return raw;
+}
+
+/**
+ * Greenhouse puts the company name on every job, so a board with no jobs has none. For
+ * those, one extra call to the board's own endpoint supplies the name and any domain its
+ * intro text links to. About 2% of live boards are empty, so this is a handful of
+ * requests a night, not a second pass.
+ */
+async function fetchGreenhouse(token: string, pace: () => Promise<void>): Promise<BoardResult> {
+  const board = await fetchGreenhouseBoard(token, { pace });
+  if (!board.found || board.companyName) return board;
+  const info = await fetchGreenhouseBoardName(token, { pace });
+  if (!info) return board;
+  return {
+    ...board,
+    companyName: info.name,
+    domainCandidates: board.domainCandidates.length ? board.domainCandidates : info.domainCandidates,
+  };
 }

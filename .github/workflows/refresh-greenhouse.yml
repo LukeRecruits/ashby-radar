@@ -1,0 +1,46 @@
+name: refresh-greenhouse
+
+on:
+  schedule:
+    # Daily, 00:30 UTC. Early enough that even a long first pass has finished before the
+    # 07:15 trigger run, and the snapshot it writes is dated the same UTC day the rules
+    # evaluate. Never before midnight: a run started at 23:00 would date its snapshots
+    # the day before and every rule would miss them.
+    - cron: '30 0 * * *'
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: 'Check at most this many companies (0 = all). For smoke tests.'
+        required: false
+        default: '0'
+
+concurrency:
+  group: refresh-greenhouse
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    # Paced at one request per second against Greenhouse, its own budget, separate from
+    # Ashby's. The first verification of every discovered name can run past this; the
+    # refresh is idempotent per UTC day, so the next night resumes where it stopped.
+    timeout-minutes: 340
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - name: Run refresh
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RADAR_SOURCE: greenhouse
+          RADAR_REFRESH_LIMIT: ${{ inputs.limit || '0' }}
+        run: npm run refresh

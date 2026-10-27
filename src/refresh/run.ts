@@ -257,9 +257,12 @@ function leadFields(
 async function checkCompany(
   company: Company,
   snapshotDate: string,
-  now: string,
+  pace: () => Promise<void>,
 ): Promise<{ outcome: Outcome; opened: number; closed: number }> {
-  const board = await client.fetchBoard(company.board_name);
+  // The client paces itself: a Greenhouse board is more than one request.
+  const board = await client.fetchBoard(company.board_name, pace);
+  // Stamped after the read, as before, rather than while queued for a slot.
+  const now = new Date().toISOString();
 
   if (!board.found) {
     // A 404 is not proof the name was junk. Ordinary company names 404 because they are
@@ -346,9 +349,8 @@ async function main(): Promise<void> {
         const company = unique[index];
         if (!company) return;
 
-        await atsSlot();
         try {
-          const result = await checkCompany(company, snapshotDate, new Date().toISOString());
+          const result = await checkCompany(company, snapshotDate, atsSlot);
           tally[result.outcome] += 1;
           jobsOpened += result.opened;
           jobsClosed += result.closed;
