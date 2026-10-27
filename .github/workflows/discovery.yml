@@ -29,6 +29,8 @@ jobs:
 
       - name: Run discovery
         env:
+          # The default, stated so the two discovery workflows read side by side.
+          RADAR_SOURCE: ashby
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: npm run discovery
