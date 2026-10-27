@@ -247,5 +247,11 @@ export const config = {
      * for the board API. Its own limiter, so the two refreshes never share a budget.
      */
     requestDelayMs: 1_100,
+    /**
+     * Fetch /departments alongside /jobs. The plain jobs list carries no departments, and
+     * the alternative, content=true, is about sixteen times the bytes. Off means one
+     * request per board and a null department on every Greenhouse job.
+     */
+    fetchDepartments: true,
   },
 } as const;
