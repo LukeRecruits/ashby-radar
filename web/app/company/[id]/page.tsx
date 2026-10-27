@@ -36,6 +36,7 @@ import {
   workplaceSplit,
   type Group,
 } from '@/lib/company';
+import { atsLabel } from '@/lib/leads';
 
 export const dynamic = 'force-dynamic';
 
@@ -99,18 +100,19 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 /**
  * How we came to believe this domain belongs to this company, in words.
  *
- * Confidence 100 means the company's own careers page links back to this Ashby board,
+ * Confidence 100 means the company's own careers page links back to this job board,
  * which is proof. Anything lower is a name match, which is a guess, and the difference
  * matters a great deal when the next step is addressing a stranger by their employer.
  */
 function domainProvenance(
   confidence: number | null,
   source: string | null,
+  ats: string,
 ): { verdict: string; detail: string } {
   if (confidence === 100) {
     return {
       verdict: 'Proved',
-      detail: `Their careers page links back to this Ashby board${
+      detail: `Their careers page links back to this ${ats} board${
         source ? ` (${source})` : ''
       }. This is the company.`,
     };
@@ -150,6 +152,7 @@ export default async function CompanyPage({
   if (!page) notFound();
 
   const { company, groups, history, signals, oldestRoles, newestRoles } = page;
+  const ats = atsLabel(company.source);
 
   // Where the visitor came from, carried in `from` as a whole local path, so "back"
   // returns to the queue or to the filtered segment of the list rather than to an
@@ -196,7 +199,7 @@ export default async function CompanyPage({
       ? Math.round((company.roles_with_pay / company.open_roles) * 100)
       : null;
 
-  const provenance = domainProvenance(company.domain_confidence, company.domain_source);
+  const provenance = domainProvenance(company.domain_confidence, company.domain_source, ats);
 
   const change = company.open_roles_change_30d;
   const linkedinSearch = `https://www.linkedin.com/search/results/companies/?keywords=${encodeURIComponent(
@@ -237,7 +240,7 @@ export default async function CompanyPage({
             </p>
             {company.display_name && company.display_name !== company.board_name ? (
               <p className="mt-0.5 text-[11px] text-[var(--ink-faint)]">
-                Ashby board: <span className="nums">{company.board_name}</span>
+                {ats} board: <span className="nums">{company.board_name}</span>
               </p>
             ) : null}
           </div>
@@ -247,10 +250,10 @@ export default async function CompanyPage({
               <span
                 className="rounded border px-2 py-1"
                 style={{ borderColor: 'var(--warm)', color: 'var(--warm)' }}
-                title="Status on Ashby, from the last successful check"
+                title={`Status on ${ats}, from the last successful check`}
               >
                 {company.status === 'inactive'
-                  ? 'Left Ashby'
+                  ? `Left ${ats}`
                   : company.status === 'not_found'
                     ? 'Board not found'
                     : 'Unverified'}
@@ -270,7 +273,7 @@ export default async function CompanyPage({
               rel="noreferrer noopener"
               className="rounded-md border border-[var(--line-strong)] px-3 py-1.5 hover:border-[var(--accent)] hover:text-[var(--accent)]"
             >
-              Ashby board
+              {ats} board
             </a>
             {company.domain ? (
               <a
@@ -383,7 +386,7 @@ export default async function CompanyPage({
           <Trend history={history} />
         </section>
 
-        <Evidence signals={signals} />
+        <Evidence signals={signals} ats={ats} />
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
@@ -423,11 +426,13 @@ export default async function CompanyPage({
           title="Longest open"
           note={`Oldest ${ROLE_SAMPLE}`}
           roles={oldestRoles}
+          ats={ats}
         />
         <RoleList
           title="Most recently posted"
           note={`Newest ${ROLE_SAMPLE}`}
           roles={newestRoles}
+          ats={ats}
         />
       </div>
 

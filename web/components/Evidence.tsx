@@ -173,7 +173,15 @@ function RawEvidence({ evidence }: { evidence: Record<string, unknown> }) {
   );
 }
 
-export function Evidence({ signals }: { signals: Signal[] }) {
+/**
+ * `new_to_ashby` keeps its internal name and means "new to its ATS" for every source, so
+ * its label names the company's actual ATS rather than saying "New" with no object.
+ */
+function labelOf(type: SignalType, fallback: string, ats: string): string {
+  return type === 'new_to_ashby' ? `New to ${ats}` : fallback;
+}
+
+export function Evidence({ signals, ats }: { signals: Signal[]; ats: string }) {
   if (!signals.length) {
     return (
       <section className="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-4">
@@ -212,7 +220,7 @@ export function Evidence({ signals }: { signals: Signal[] }) {
             >
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <h3 className="text-[13px] font-medium">
-                  {meta?.label ?? signal.type}
+                  {labelOf(signal.type, meta?.label ?? signal.type, ats)}
                   <span className="ml-2 font-normal text-[var(--ink-faint)]">
                     {meta?.hint ?? signal.type}
                   </span>

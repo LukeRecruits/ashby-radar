@@ -4,7 +4,7 @@
  *
  * Twelve of each rather than all of them. The oldest twelve is the conversation ("you have
  * had a Senior Backend Engineer open since April"); the newest twelve is what the company
- * is doing right now. The 800 in between are on the Ashby board, which is one click away
+ * is doing right now. The 800 in between are on the job board, which is one click away
  * and is the authoritative place to read them.
  */
 
@@ -55,10 +55,13 @@ export function RoleList({
   title,
   note,
   roles,
+  ats,
 }: {
   title: string;
   note: string;
   roles: Role[];
+  /** The company's ATS, as printed. */
+  ats: string;
 }) {
   return (
     <section className="rounded-lg border border-[var(--line)] bg-[var(--panel)]">
@@ -81,7 +84,7 @@ export function RoleList({
             <tbody>
               {roles.map((role) => (
                 <tr
-                  key={role.ashby_job_id}
+                  key={role.external_job_id}
                   className="border-b border-[var(--line)] last:border-0 hover:bg-[var(--bg)]"
                 >
                   <td className={TD}>
@@ -122,7 +125,7 @@ export function RoleList({
         </div>
       ) : (
         <p className="px-4 pb-4 text-[13px] text-[var(--ink-soft)]">
-          No open roles on the board today. An empty Ashby board is an ordinary state, not
+          No open roles on the board today. An empty {ats} board is an ordinary state, not
           a company that has left.
         </p>
       )}

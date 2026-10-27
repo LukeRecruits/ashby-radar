@@ -3,7 +3,7 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'Ashby Radar',
-  description: 'Companies using Ashby, and which of them are worth talking to.',
+  description: 'Companies using Ashby or Greenhouse, and which of them are worth talking to.',
   robots: { index: false, follow: false },
 };
 

@@ -28,16 +28,28 @@ import { db } from './supabase';
  * been scheduled that should not be.
  */
 export const CADENCE: Record<string, { label: string; hours: number | null; note: string }> = {
-  discovery: { label: 'Discovery', hours: 24 * 9, note: 'Weekly, Sunday 03:00 UTC' },
+  discovery: { label: 'Ashby discovery', hours: 24 * 9, note: 'Weekly, Sunday 03:00 UTC' },
+  'discovery-greenhouse': {
+    label: 'Greenhouse discovery',
+    hours: 24 * 9,
+    note: 'Weekly, Saturday 03:00 UTC',
+  },
   enrich: { label: 'Enrich', hours: 24 * 9, note: 'Weekly, Sunday 06:30 UTC' },
-  refresh: { label: 'Refresh', hours: 30, note: 'Daily, 05:00 UTC' },
+  refresh: { label: 'Ashby refresh', hours: 30, note: 'Daily, 05:00 UTC' },
+  'refresh-greenhouse': { label: 'Greenhouse refresh', hours: 30, note: 'Daily, 00:30 UTC' },
   triggers: { label: 'Triggers', hours: 30, note: 'Daily, 07:15 UTC' },
   retention: { label: 'Retention', hours: 24 * 35, note: 'Monthly, 1st 04:00 UTC' },
   export: { label: 'Export', hours: null, note: 'Manual only' },
   digest: { label: 'Digest', hours: null, note: 'Retired. Should not run' },
 };
 
+/**
+ * One row per ATS (migration 0024). Every number is the 0021 definition restricted to
+ * that source. `suppressions` and `contacts_unattached` are not about a company, so they
+ * are the same global count on every row and the page prints them once.
+ */
 export type Summary = {
+  source: string;
   companies: number;
   active: number;
   inactive: number;
@@ -58,6 +70,7 @@ export type Summary = {
   signals: number;
   companies_with_signal: number;
   contacts: number;
+  contacts_unattached: number;
   suppressions: number;
   prospects: number;
   in_band: number;
@@ -92,12 +105,13 @@ export type Run = {
 export const RUN_SAMPLE = 25;
 
 export async function fetchHealth(): Promise<{
-  summary: Summary | null;
+  summaries: Summary[];
   workflows: Workflow[];
   runs: Run[];
 }> {
   const [summary, workflows, runs] = await Promise.all([
-    db().from('health_summary').select('*').maybeSingle(),
+    // Alphabetical puts Ashby first, which is the column order the page wants.
+    db().from('health_summary').select('*').order('source', { ascending: true }),
     db()
       .from('health_workflows')
       .select(
@@ -124,7 +138,7 @@ export async function fetchHealth(): Promise<{
   }
 
   return {
-    summary: (summary.data as unknown as Summary) ?? null,
+    summaries: (summary.data ?? []) as unknown as Summary[],
     workflows: (workflows.data ?? []) as unknown as Workflow[],
     runs: (runs.data ?? []) as unknown as Run[],
   };

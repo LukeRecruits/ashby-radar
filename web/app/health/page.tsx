@@ -7,7 +7,8 @@
  * breaking shows up here as a collapse rather than as an error. Then the runs
  * themselves, for reading after something looks wrong.
  *
- * No charts. Six workflows and twenty numbers do not need a shape drawn round them.
+ * No charts. Nine workflows and twenty numbers per ATS do not need a shape drawn round
+ * them. Ashby and Greenhouse sit side by side, one column each, never summed.
  */
 
 import { Nav } from '@/components/Nav';
@@ -20,6 +21,7 @@ import {
   type Summary,
   type Workflow,
 } from '@/lib/health';
+import { atsLabel } from '@/lib/leads';
 
 export const dynamic = 'force-dynamic';
 
@@ -151,7 +153,36 @@ function Workflows({ rows }: { rows: Workflow[] }) {
   );
 }
 
-function Qualification({ s }: { s: Summary }) {
+/**
+ * One column per ATS, side by side, so the two funnels can be read against each other.
+ * The numbers are per source; nothing here adds Ashby and Greenhouse together, because a
+ * combined funnel would hide a collapse in the smaller one.
+ */
+function BySource({
+  rows,
+  children,
+}: {
+  rows: Summary[];
+  children: (s: Summary) => React.ReactNode;
+}) {
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      {rows.map((s) => (
+        <div key={s.source} className="rounded-md border border-[var(--line)] p-3">
+          <h3 className="mb-3 text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-soft)]">
+            {atsLabel(s.source)}
+          </h3>
+          <div className="flex flex-wrap gap-x-8 gap-y-4">{children(s)}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Qualification({ rows }: { rows: Summary[] }) {
+  // Global, not per source: a suppression is a person with no employer attached.
+  const suppressions = rows[0]?.suppressions ?? 0;
+  const unattached = rows[0]?.contacts_unattached ?? 0;
   return (
     <section className="mt-4 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-4">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-3">
@@ -160,70 +191,103 @@ function Qualification({ s }: { s: Summary }) {
           Watch the last number. A rule breaking shows up here as a collapse, not an error
         </span>
       </div>
-      <div className="flex flex-wrap gap-x-8 gap-y-4">
-        <Stat
-          label="Discovered"
-          value={s.companies}
-          note={`${s.active.toLocaleString('en-GB')} still live on Ashby`}
-        />
-        <Stat label="Prospects" value={s.prospects} note="Active, with a domain, not parked" />
-        <Stat label="In band" value={s.in_band} note="5 to 50 open roles" />
-        <Stat
-          label="No recruiter req"
-          value={s.in_band_no_recruiter_req}
-          note="Not hiring a recruiter today"
-        />
-        <Stat
-          label="Fully qualified"
-          value={s.fully_qualified}
-          note="And 3+ genuinely stale roles"
-          tone={s.fully_qualified === 0 ? 'warm' : 'good'}
-        />
-        <Stat label="On the funnel" value={s.contacts} note={`${s.suppressions} suppressed`} />
-      </div>
+      <BySource rows={rows}>
+        {(s) => (
+          <>
+            <Stat
+              label="Discovered"
+              value={s.companies}
+              note={`${s.active.toLocaleString('en-GB')} still live on ${atsLabel(s.source)}`}
+            />
+            <Stat label="Prospects" value={s.prospects} note="Active, with a domain, not parked" />
+            <Stat label="In band" value={s.in_band} note="5 to 50 open roles" />
+            <Stat
+              label="No recruiter req"
+              value={s.in_band_no_recruiter_req}
+              note="Not hiring a recruiter today"
+            />
+            <Stat
+              label="Fully qualified"
+              value={s.fully_qualified}
+              note="And 3+ genuinely stale roles"
+              tone={s.fully_qualified === 0 ? 'warm' : 'good'}
+            />
+            <Stat label="On the funnel" value={s.contacts} note="Contacts at these companies" />
+          </>
+        )}
+      </BySource>
+      <p className="mt-3 text-[12px] text-[var(--ink-soft)]">
+        <span className="nums">{suppressions.toLocaleString('en-GB')}</span> suppressed, across
+        every ATS.
+        {unattached > 0 ? (
+          <>
+            {' '}
+            <span className="nums">{unattached.toLocaleString('en-GB')}</span> on the funnel
+            with no company attached, so counted in neither column.
+          </>
+        ) : null}
+      </p>
     </section>
   );
 }
 
-function Data({ s }: { s: Summary }) {
-  const thin = s.snapshot_days < 31;
+function Data({ rows }: { rows: Summary[] }) {
   return (
     <section className="mt-4 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-4">
       <h2 className="mb-3 text-[13px] font-semibold tracking-tight">The data behind it</h2>
-      <div className="flex flex-wrap gap-x-8 gap-y-4">
-        <Stat label="Named" value={s.named} note={share(s.named, s.companies)} />
-        <Stat label="With a domain" value={s.with_domain} note={share(s.with_domain, s.companies)} />
-        <Stat label="With a country" value={s.with_country} note={share(s.with_country, s.companies)} />
-        <Stat label="Left Ashby" value={s.not_found + s.inactive} note="Checked and gone" />
-        <Stat
-          label="Open roles"
-          value={s.open_roles}
-          note={`${s.stale_roles.toLocaleString('en-GB')} stale, ${s.evergreen_roles} evergreen and not counted`}
-        />
-        <Stat
-          label="Snapshot days"
-          value={s.snapshot_days}
-          note={thin ? 'Under 31, so the 30-day rules are still warming up' : `From ${s.first_snapshot}`}
-          tone={thin ? 'warm' : undefined}
-        />
-        <Stat
-          label="In today's snapshot"
-          value={s.companies_in_last_snapshot}
-          note={`${share(s.companies_in_last_snapshot, s.active)} of active, on ${s.last_snapshot}`}
-          tone={s.companies_in_last_snapshot < s.active * 0.98 ? 'warm' : undefined}
-        />
-        <Stat
-          label="Signals"
-          value={s.signals}
-          note={`${s.companies_with_signal.toLocaleString('en-GB')} companies`}
-        />
-      </div>
+      <BySource rows={rows}>
+        {(s) => {
+          const thin = s.snapshot_days < 31;
+          return (
+            <>
+              <Stat label="Named" value={s.named} note={share(s.named, s.companies)} />
+              <Stat label="With a domain" value={s.with_domain} note={share(s.with_domain, s.companies)} />
+              <Stat label="With a country" value={s.with_country} note={share(s.with_country, s.companies)} />
+              <Stat
+                label={`Left ${atsLabel(s.source)}`}
+                value={s.not_found + s.inactive}
+                note="Checked and gone"
+              />
+              <Stat
+                label="Open roles"
+                value={s.open_roles}
+                note={`${s.stale_roles.toLocaleString('en-GB')} stale, ${s.evergreen_roles} evergreen and not counted`}
+              />
+              <Stat
+                label="Snapshot days"
+                value={s.snapshot_days}
+                note={
+                  thin
+                    ? 'Under 31, so the 30-day rules are still warming up'
+                    : `From ${s.first_snapshot}`
+                }
+                tone={thin ? 'warm' : undefined}
+              />
+              <Stat
+                label="In today's snapshot"
+                value={s.companies_in_last_snapshot}
+                note={
+                  s.last_snapshot
+                    ? `${share(s.companies_in_last_snapshot, s.active)} of active, on ${s.last_snapshot}`
+                    : 'No snapshot yet'
+                }
+                tone={s.companies_in_last_snapshot < s.active * 0.98 ? 'warm' : undefined}
+              />
+              <Stat
+                label="Signals"
+                value={s.signals}
+                note={`${s.companies_with_signal.toLocaleString('en-GB')} companies`}
+              />
+            </>
+          );
+        }}
+      </BySource>
     </section>
   );
 }
 
 export default async function HealthPage() {
-  const { summary, workflows, runs } = await fetchHealth();
+  const { summaries, workflows, runs } = await fetchHealth();
 
   return (
     <main className="mx-auto max-w-[1100px] px-4 py-6">
@@ -238,8 +302,8 @@ export default async function HealthPage() {
       </header>
 
       <Workflows rows={workflows} />
-      {summary ? <Qualification s={summary} /> : null}
-      {summary ? <Data s={summary} /> : null}
+      {summaries.length ? <Qualification rows={summaries} /> : null}
+      {summaries.length ? <Data rows={summaries} /> : null}
 
       <section className="mt-4 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-4">
         <div className="mb-2 flex flex-wrap items-baseline justify-between gap-3">

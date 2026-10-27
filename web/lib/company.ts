@@ -20,8 +20,14 @@ export const ROLE_SAMPLE = 12;
 /** Groups past this get folded into "Other", so a 33-department board stays scannable. */
 export const GROUP_LIMIT = 8;
 
+/**
+ * `external_job_id` is the ATS's own id, the key for every source. `ashby_job_id` is a
+ * uuid and null for Greenhouse, whose ids are integers. `ashby_job_url` predates
+ * Greenhouse and is the job's URL whatever the source.
+ */
 export type Role = {
-  ashby_job_id: string;
+  external_job_id: string;
+  ashby_job_id: string | null;
   title: string | null;
   department: string | null;
   team: string | null;
@@ -59,13 +65,18 @@ export type Signal = {
 };
 
 const LEAD_COLUMNS =
-  'id, label, display_name, board_name, board_url, status, domain, domain_confidence, ' +
+  'id, label, display_name, board_name, board_url, source, status, domain, domain_confidence, ' +
   'domain_source, top_country, top_locality, remote_share, discovered_via, ' +
   'first_seen_at, last_checked_at, last_active_at, parked_at, parked_reason, ' +
   'snapshot_date, open_roles, recruiter_roles, roles_with_pay, open_roles_30d_ago, ' +
   'open_roles_change_30d, stale_roles_120, stale_roles_180, oldest_open_role_at, ' +
   'signal_count, role_band, has_in_house_ta, new_to_ashby_at, hiring_spike_at, ' +
   'first_recruiter_at, sweet_spot_at, long_open_at, publishes_comp_at';
+
+const ROLE_COLUMNS =
+  'external_job_id, ashby_job_id, title, department, team, address_country, ' +
+  'address_locality, workplace_type, employment_type, has_compensation, published_at, ' +
+  'age_days, ashby_job_url';
 
 /** The lead row, plus the fields the list page has no column for. */
 export type Company = Lead & {
@@ -133,22 +144,14 @@ export async function fetchCompany(id: string): Promise<CompanyPage | null> {
     // this open since April"); the newest are what the company is doing right now.
     db()
       .from('lead_roles')
-      .select(
-        'ashby_job_id, title, department, team, address_country, address_locality, ' +
-          'workplace_type, employment_type, has_compensation, published_at, age_days, ' +
-          'ashby_job_url',
-      )
+      .select(ROLE_COLUMNS)
       .eq('company_id', id)
       .order('published_at', { ascending: true, nullsFirst: false })
       .limit(ROLE_SAMPLE),
 
     db()
       .from('lead_roles')
-      .select(
-        'ashby_job_id, title, department, team, address_country, address_locality, ' +
-          'workplace_type, employment_type, has_compensation, published_at, age_days, ' +
-          'ashby_job_url',
-      )
+      .select(ROLE_COLUMNS)
       .eq('company_id', id)
       .order('published_at', { ascending: false, nullsFirst: false })
       .limit(ROLE_SAMPLE),
