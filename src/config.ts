@@ -233,6 +233,21 @@ export const config = {
     retentionMonths: 24,
   },
 
+  people: {
+    /**
+     * The scheduled people sweep: one Exa search per in-band prospect, about $0.007 each.
+     * A run takes the companies searched longest ago (never-searched first), so a full
+     * first pass of ~3,100 companies takes about a week at this size and costs ~$22.
+     */
+    companiesPerRun: 500,
+    /** A company is searched again once its last search is this old. */
+    refreshDays: 90,
+    /** Searches in flight at once. Exa's limit is far above this; it is politeness. */
+    concurrency: 4,
+    /** Stored people not seen by a sweep for this long are deleted. Matches contacts. */
+    retentionMonths: 24,
+  },
+
   exports: {
     /** Written here, then uploaded as workflow artifacts. */
     outputDir: 'out',

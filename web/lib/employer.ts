@@ -31,7 +31,7 @@ function normalise(value: string): string {
 
 /** The memorable part of a domain: synthesia.io -> synthesia, my-co.co.uk -> my co. */
 function domainLabel(domain: string): string {
-  return normalise(domain.replace(/^www\./, '').split('.')[0].replace(/-/g, ' '));
+  return normalise(domain.replace(/^www\./, '').split('.')[0]!.replace(/-/g, ' '));
 }
 
 /**
@@ -95,8 +95,8 @@ export function isCurrentEmployee(
 
   return {
     isCurrent: true,
-    title: current[0].title?.trim() || null,
-    startedAt: current[0].dates?.from?.trim() || null,
+    title: current[0]!.title?.trim() || null,
+    startedAt: current[0]!.dates?.from?.trim() || null,
     reason: 'match',
   };
 }

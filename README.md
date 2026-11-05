@@ -467,11 +467,24 @@ Built, and the paperwork came first. The panel sits on the company page and does
 things: shows who is already on the list, finds the talent lead on demand, and records an
 objection permanently.
 
-**Finding is not storing.** Pressing "Find the talent lead" runs one Exa search in that
-render and shows what came back. Nothing is written. A person reaches the database only
-when Add is pressed, which is the whole basis of the minimisation claim in
-`docs/prospecting-lia.md`: Radar holds somebody only once Luke has decided to approach
-them.
+**Superseded 2026-11-05: the people sweep stores the team in bulk.** Luke reversed
+"finding is not storing" and is updating `docs/prospecting-lia.md` himself. The daily
+`people` workflow (`src/people/run.ts`, migration 0025) runs the same Exa search for up to
+500 in-band prospects a run, never-searched first and then anything older than 90 days,
+and replaces each company's list in `company_people` through `replace_company_people()`.
+Every search is recorded in `people_lookups`, so "not searched" and "nobody found" differ.
+The lead list shows the most senior person, team size and a "New leader" chip (Head-level
+or above, started in the last six months) from `lead_people_summary`; the company page
+lists the whole team with Add buttons. `contacts` is still the outreach pipeline and
+still holds only people Luke has added. The sweep imports `web/lib/exa.ts` rather than
+keeping a copy, so there is one employer filter. Cost is about $0.007 a company, ~$22
+for a full pass of ~3,100. Suppression covers both tables: a suppressed key is skipped by
+the function, refused by trigger, and deleted from `company_people` when it is added.
+Rows unseen for 24 months are purged at the end of each run. All three asserted from
+outside on 2026-11-05, plus anon SELECT-only on both views and no execute on the RPCs.
+
+The original rule, kept for history: pressing "Find the talent lead" runs one Exa search
+in that render and shows what came back, and nothing is written until Add is pressed.
 
 **Two filters, because the search alone is not trustworthy.** A people search for Vertice
 returned people at STRATOS, CUBE and BigID. So a candidate is kept only if Exa's
@@ -679,6 +692,7 @@ All secrets live in GitHub Actions secrets. `.env.example` lists every one.
 | `SUPABASE_SERVICE_ROLE_KEY` | every workflow |
 | `SLACK_WEBHOOK_URL` | the weekly digest, which no longer runs on a schedule. Never set |
 | `CLAY_WEBHOOK_URL` | the Clay hand-off, now retired. Never set, and deliberately so |
+| `EXA_API_KEY` | the `people` sweep. The same key as the Vercel project's; without it the run stops on the first company and says why |
 
 The console has three of its own, on the Vercel project rather than in Actions:
 `CONSOLE_PASSWORD`, `CONSOLE_WRITE_TOKEN` and `EXA_API_KEY`. The first two fail closed

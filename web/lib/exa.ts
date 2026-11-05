@@ -80,7 +80,7 @@ type ExaResult = {
  */
 function queryFor(company: string, domain: string | null): string {
   const where = domain ? `${company} (${domain})` : company;
-  return `Head of Talent Acquisition, Head of People or recruiting lead at ${where}`;
+  return `VP or Head of People, Head of Talent Acquisition, Head of Talent, talent or people team member (recruiter, talent enablement, people experience) at ${where}`;
 }
 
 export async function findTalentContacts(
@@ -153,7 +153,7 @@ export async function findTalentContacts(
     candidates.push({
       // Falling back to the result title is worth it: Exa's page titles are
       // "Jane Doe - Synthesia - LinkedIn", so the first segment is the name.
-      name: person.name?.trim() || (result.title ?? '').split(' - ')[0].trim() || 'Unknown',
+      name: person.name?.trim() || (result.title ?? '').split(' - ')[0]!.trim() || 'Unknown',
       title: current.title,
       linkedinUrl: `https://www.${key}`,
       key,

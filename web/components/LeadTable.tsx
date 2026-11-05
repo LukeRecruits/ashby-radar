@@ -11,6 +11,7 @@
  */
 
 import { SIGNALS, atsLabel, type Lead } from '@/lib/leads';
+import type { PeopleSummary } from '@/lib/people';
 
 /**
  * The company name opens the company page rather than the job board, because the page is
@@ -22,6 +23,50 @@ import { SIGNALS, atsLabel, type Lead } from '@/lib/leads';
  */
 function companyHref(id: string, backQuery: string): string {
   return `/company/${id}?from=${encodeURIComponent(`/leads${backQuery}`)}`;
+}
+
+function since(value: string | null): string | null {
+  if (!value || !/^\d{4}-\d{2}/.test(value)) return null;
+  const date = new Date(`${value.slice(0, 7)}-01T00:00:00Z`);
+  return date.toLocaleDateString('en-GB', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+}
+
+/**
+ * The most senior person the people sweep found, with the rest of the team as a count.
+ * Blank until the sweep reaches the company, and says so, because "not searched" and
+ * "searched, nobody there" are different answers.
+ */
+function PeopleCell({ summary }: { summary: PeopleSummary | undefined }) {
+  if (!summary) return <span className="text-[11px] text-[var(--ink-faint)]">Not searched yet</span>;
+  if (!summary.people_count || !summary.top_name) {
+    return <span className="text-[11px] text-[var(--ink-faint)]">Nobody found</span>;
+  }
+  const started = since(summary.top_started_at);
+  const others = summary.people_count - 1;
+  return (
+    <div className="max-w-[240px]">
+      <a
+        href={summary.top_linkedin_url ?? '#'}
+        target="_blank"
+        rel="noreferrer noopener"
+        className="font-medium hover:text-[var(--accent)] hover:underline"
+      >
+        {summary.top_name}
+      </a>
+      {summary.new_leader ? (
+        <span className="ml-1.5">
+          <Chip label="New leader" title="A Head-level or more senior people person started in the last 6 months" />
+        </span>
+      ) : null}
+      <div className="mt-0.5 truncate text-[11px] text-[var(--ink-soft)]" title={summary.top_title ?? undefined}>
+        {summary.top_title ?? 'No title'}
+        {started ? ` · since ${started}` : ''}
+      </div>
+      <div className="text-[11px] text-[var(--ink-faint)]">
+        {others > 0 ? `+${others} more in talent and people` : 'Only person found'}
+      </div>
+    </div>
+  );
 }
 
 function Chip({ label, title }: { label: string; title: string }) {
@@ -74,9 +119,11 @@ const TD = 'px-3 py-2 align-top';
 
 export function LeadTable({
   rows,
+  people,
   backQuery = '',
 }: {
   rows: Lead[];
+  people?: Map<string, PeopleSummary>;
   backQuery?: string;
 }) {
   if (!rows.length) {
@@ -93,6 +140,7 @@ export function LeadTable({
         <thead>
           <tr className="border-b border-[var(--line)]">
             <th className={TH}>Company</th>
+            <th className={TH}>People team</th>
             <th className={TH}>Hiring in</th>
             <th className={`${TH} text-right`}>Open</th>
             <th className={`${TH} text-right`}>30d</th>
@@ -151,6 +199,10 @@ export function LeadTable({
                       <span title={lead.parked_reason ?? undefined}>· Parked</span>
                     ) : null}
                   </div>
+                </td>
+
+                <td className={TD}>
+                  <PeopleCell summary={people?.get(lead.id)} />
                 </td>
 
                 <td className={TD}>

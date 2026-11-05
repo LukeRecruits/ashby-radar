@@ -26,6 +26,7 @@ import { Evidence } from '@/components/Evidence';
 import { RoleList } from '@/components/RoleList';
 import { Trend } from '@/components/Trend';
 import { fetchContacts } from '@/lib/contacts';
+import { fetchPeople } from '@/lib/people';
 import { findTalentContacts, type LookupResult } from '@/lib/exa';
 import { fetchStages } from '@/lib/queue';
 import {
@@ -144,11 +145,12 @@ export default async function CompanyPage({
   const { id } = await params;
   if (!isCompanyId(id)) notFound();
 
-  const [page, query, contacts, stages] = await Promise.all([
+  const [page, query, contacts, stages, stored] = await Promise.all([
     fetchCompany(id),
     searchParams,
     fetchContacts(id),
     fetchStages(),
+    fetchPeople(id),
   ]);
   if (!page) notFound();
 
@@ -384,6 +386,7 @@ export default async function CompanyPage({
         contacts={contacts}
         stages={stages}
         lookup={lookup}
+        stored={stored}
         back={back}
         findHref={findHref}
         message={message}

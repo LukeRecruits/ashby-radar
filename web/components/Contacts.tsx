@@ -19,6 +19,7 @@
 
 import type { Candidate, LookupResult } from '@/lib/exa';
 import type { Contact } from '@/lib/contacts';
+import type { StoredPeople } from '@/lib/people';
 import { NO_REASONS, type FunnelRow } from '@/lib/queue';
 import {
   addContactAction,
@@ -448,7 +449,7 @@ function Outcome({ result }: { result: Extract<LookupResult, { state: 'ok' }> })
       {'. '}
       {candidates.length === 0 ? 'None survived the filters' : `${candidates.length} kept`}
       {bits.length ? `, set aside ${bits.join(', ')}` : ''}
-      {'. Nothing here is stored until you press Add.'}
+      {'. Live search; the stored list updates at the next sweep.'}
     </p>
   );
 }
@@ -459,6 +460,7 @@ export function Contacts({
   contacts,
   stages,
   lookup,
+  stored,
   back,
   findHref,
   message,
@@ -468,6 +470,7 @@ export function Contacts({
   contacts: Contact[];
   stages: FunnelRow[];
   lookup: LookupResult | null;
+  stored: StoredPeople;
   back: string;
   findHref: string;
   message: { kind: 'ok' | 'err'; text: string } | null;
@@ -524,7 +527,39 @@ export function Contacts({
         </p>
       )}
 
-      {lookup === null ? (
+      {lookup === null && stored.searchedAt ? (
+        <div>
+          <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
+            <h3 className="text-[12px] font-semibold">
+              People team at {companyLabel}{' '}
+              <span className="nums font-normal text-[var(--ink-faint)]">{stored.people.length}</span>
+            </h3>
+            <a href={findHref} className="text-[11px] text-[var(--ink-faint)] hover:text-[var(--accent)]">
+              Search again now
+            </a>
+          </div>
+          {stored.people.length ? (
+            <ul>
+              {stored.people.map((candidate) => (
+                <Found
+                  key={candidate.key}
+                  candidate={candidate}
+                  companyId={companyId}
+                  back={back}
+                  already={known.has(candidate.key)}
+                />
+              ))}
+            </ul>
+          ) : (
+            <p className="text-[13px] text-[var(--ink-soft)]">
+              The sweep found nobody in talent or people here.
+            </p>
+          )}
+          <p className="mt-2 text-[11px] text-[var(--ink-faint)]">
+            {`From the people sweep on ${new Date(stored.searchedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}. Refreshed every 90 days.`}
+          </p>
+        </div>
+      ) : lookup === null ? (
         <a href={findHref} className={PRIMARY}>
           Find the talent lead
         </a>
