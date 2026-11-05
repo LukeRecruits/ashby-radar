@@ -1,6 +1,6 @@
 # Record of processing: prospecting contacts
 
-The Article 30 entry for the one activity in Ashby Radar that involves a person, plus how
+The Article 30 entry for the one activity in Customer Radar (formerly Ashby Radar) that involves a person, plus how
 a request from one of them is handled. Article 30's exemption for organisations under 250
 staff does not cover processing that is regular rather than occasional, and this runs
 weekly, so the record exists.
@@ -15,7 +15,7 @@ version at https://candidhq.tech/privacy/prospecting.
 | Activity | Identifying and approaching the talent-acquisition lead at a company that uses Ashby or Greenhouse |
 | Controller | Candid HQ Limited, registered in Scotland. ICO registration C1941533 |
 | Contact | privacy@candidhq.tech |
-| Processor / system | Ashby Radar (`LukeRecruits/ashby-radar`), a CandidHQ internal tool |
+| Processor / system | Customer Radar, formerly Ashby Radar (`LukeRecruits/ashby-radar`), a CandidHQ internal tool |
 | Data subjects | Talent-acquisition, recruiting and people leaders, in a professional capacity |
 | Categories of data | Name; current job title; LinkedIn profile URL; the employer they are recorded against. Nothing else |
 | Special category data | None sought, none stored |

@@ -194,17 +194,17 @@ export function bucket(rows: QueueRow[]): Buckets {
 export const ADVANCE: Record<string, { stage: string; label: string; hint: string }> = {
   invite: {
     stage: 'invite_sent',
-    label: 'Invited',
+    label: 'Log invite sent',
     hint: 'Records the invitation, which counts against the rolling weekly limit',
   },
   message: {
     stage: 'messaged',
-    label: 'Messaged',
+    label: 'Log message sent',
     hint: 'Records the first message. Remember the privacy notice link',
   },
   reply: {
     stage: 'demo',
-    label: 'Demo booked',
+    label: 'Log demo booked',
     hint: 'They replied and there is something in the diary',
   },
 };

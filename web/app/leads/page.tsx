@@ -62,7 +62,7 @@ export default async function Page({
       <Nav current="/leads" />
       <header className="mb-5 flex flex-wrap items-end justify-between gap-6 border-b border-[var(--line)] pb-4">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Ashby Radar</h1>
+          <h1 className="text-xl font-semibold tracking-tight">Lead list</h1>
           <p className="mt-0.5 text-[13px] text-[var(--ink-soft)]">
             Companies running Ashby or Greenhouse, and which of them are worth a conversation.
           </p>

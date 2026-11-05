@@ -25,6 +25,8 @@ import {
 
 const BUTTON =
   'rounded-md border border-[var(--line-strong)] px-2.5 py-1 text-[12px] hover:border-[var(--accent)] hover:text-[var(--accent)]';
+const PRIMARY =
+  'rounded-md bg-[var(--brand-fill)] px-3 py-1 text-[12px] font-medium text-white hover:bg-[var(--brand-fill-hover)]';
 const SELECT =
   'rounded-md border border-[var(--line)] bg-[var(--bg)] px-1.5 py-1 text-[12px]';
 
@@ -95,8 +97,11 @@ function Row({ row, back }: { row: QueueRow; back: string }) {
           {row.full_name}
         </a>
         {row.is_connection ? (
-          <span className="ml-2 text-[11px] text-[var(--good)]" title="Already connected, so no invitation needed">
-            connected
+          <span
+            className="ml-2 rounded-full bg-[var(--brand-soft)] px-2 py-0.5 text-[11px] text-[var(--accent)]"
+            title="Already connected on LinkedIn, so no invitation needed"
+          >
+            ✓ Connected
           </span>
         ) : null}
         <div className="mt-0.5 text-[12px] text-[var(--ink-soft)]">
@@ -130,7 +135,7 @@ function Row({ row, back }: { row: QueueRow; back: string }) {
             <input type="hidden" name="stage" value={advance.stage} />
             <input type="hidden" name="said" value={`${row.full_name}: ${advance.label.toLowerCase()}`} />
             <input type="hidden" name="back" value={back} />
-            <button type="submit" className={BUTTON} title={advance.hint}>
+            <button type="submit" className={PRIMARY} title={advance.hint}>
               {advance.label}
             </button>
           </form>

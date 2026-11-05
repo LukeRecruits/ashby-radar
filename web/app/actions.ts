@@ -67,13 +67,16 @@ export async function addContactAction(form: FormData): Promise<void> {
   await run(back, `${name} added`, async () => {
     if (!name) throw new Error('A name is required.');
     if (!url) throw new Error('A LinkedIn profile URL is required.');
-    await addContact({
+    const id = await addContact({
       companyId: text(form, 'company_id'),
       fullName: name,
       jobTitle: text(form, 'job_title') || null,
       linkedinUrl: url,
       source,
     });
+    // add_contact has no connection parameter, and re-adding an existing person keeps
+    // their flag, so only a tick sets it; an unticked box never clears a known connection.
+    if (text(form, 'is_connection') === '1') await setConnection(id, true);
     return `${name} added`;
   });
 }

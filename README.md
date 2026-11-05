@@ -1,11 +1,17 @@
-# Ashby Radar
+# Customer Radar
+
+Renamed from Ashby Radar on 2026-11-05, once it read Greenhouse too. The repo, the Vercel
+project (`ashby-radar-console`) and the Supabase project keep the old name: renaming any
+of them breaks the GitHub-to-Vercel link or the console's environment, for no gain.
 
 Finds every company using Ashby or Greenhouse as its ATS, reads their open jobs every day,
 and flags hiring signals. Greenhouse joined on 2026-10-27; see **Greenhouse** below.
 
 It is a prospecting tool for CandidHQ, but it is a completely separate product: its own
 repo, its own Supabase project, its own Vercel project. No CandidHQ code, packages, env
-vars or design tokens are shared, in either direction.
+vars are shared, in either direction. The console does wear CandidHQ's brand (its colour
+tokens and mark, copied into `web/app/globals.css` and `web/public/mark.png`), but as
+copies: nothing is imported from the CandidHQ repo.
 
 ## How it works
 

@@ -1,39 +1,57 @@
 @import 'tailwindcss';
 
 /*
- * A deliberately small palette. This is a dense internal table that one person reads for
- * twenty minutes at a time, so the priorities are legibility at small sizes and enough
- * contrast to scan a column of numbers, not personality.
+ * CandidHQ's palette, adopted 2026-11-05 when the console became Customer Radar. Values
+ * are copied from candidhq/src/app/globals.css, not imported: the two repos still share
+ * no code, so a CandidHQ change does not reach here until it is copied across.
  *
- * Nothing here is shared with CandidHQ, in either direction. Separate product, separate
- * tokens, by rule.
+ * The variable names are this console's own and kept, so no component had to change to
+ * take the palette. What each one means in CandidHQ's colour language:
+ *
+ *   --accent      violet, the action and selection colour (CandidHQ's --brand-ink).
+ *                 Hover states, links, the selected option of a segmented control.
+ *   --brand-fill  violet as a filled button under white text: one primary per row.
+ *   --brand-soft  violet tint behind the current stage and selected chips.
+ *   --gradient    the brand mark only. Never a button.
+ *   --warm        CandidHQ's error red: a genuine problem or a destructive action.
+ *   --good        emerald, done.
+ *
+ * Still a dense internal table read for twenty minutes at a time, so legibility at small
+ * sizes outranks decoration.
  */
 :root {
-  --bg: #fbfbfa;
+  --bg: #faf9f7;
   --panel: #ffffff;
-  --line: #e4e4e2;
-  --line-strong: #d0d0cd;
-  --ink: #1b1b19;
-  --ink-soft: #6b6b66;
-  --ink-faint: #94948f;
-  --accent: #1d4ed8;
-  --warm: #9a3412;
-  --good: #166534;
+  --line: #e5e7eb;
+  --line-strong: #d1d5db;
+  --ink: #1f2937;
+  --ink-soft: #4b5563;
+  --ink-faint: #6b7280;
+  --accent: #5940b5;
+  --brand-fill: #6b4dd4;
+  --brand-fill-hover: #5940b5;
+  --brand-soft: #eae5fa;
+  --gradient: linear-gradient(135deg, #c4405f 0%, #6b4dd4 50%, #c25f2e 100%);
+  --warm: #b91c1c;
+  --good: #047857;
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #131312;
-    --panel: #1b1b1a;
-    --line: #2e2e2c;
-    --line-strong: #40403d;
-    --ink: #f0efed;
-    --ink-soft: #a3a39d;
-    --ink-faint: #76766f;
-    --accent: #93b4ff;
-    --warm: #f0a97c;
-    --good: #86d39d;
+    --bg: #0f1420;
+    --panel: #171d2b;
+    --line: #2a3140;
+    --line-strong: #3a4353;
+    --ink: #e6e9ef;
+    --ink-soft: #9aa4b2;
+    --ink-faint: #858e9e;
+    --accent: #a68fec;
+    --brand-fill: #6b4dd4;
+    --brand-fill-hover: #5940b5;
+    --brand-soft: #2a2140;
+    --warm: #f87171;
+    --good: #34d399;
     color-scheme: dark;
   }
 }
@@ -48,4 +66,18 @@ body {
 /* Tabular figures throughout the table, so columns of counts line up vertically. */
 .nums {
   font-variant-numeric: tabular-nums;
+}
+
+/* The wordmark face, as on candidhq.tech. Loaded in layout.tsx. */
+.wordmark {
+  font-family: var(--font-fraunces), Georgia, serif;
+}
+
+/* A <details> used as a small menu: no disclosure triangle, and it closes visually
+   into its summary. Native, so it works with no JavaScript like the rest of the console. */
+details.menu > summary {
+  list-style: none;
+}
+details.menu > summary::-webkit-details-marker {
+  display: none;
 }

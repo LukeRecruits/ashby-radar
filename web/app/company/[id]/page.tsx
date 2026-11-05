@@ -21,6 +21,7 @@ import { notFound } from 'next/navigation';
 
 import { Breakdown } from '@/components/Breakdown';
 import { Contacts } from '@/components/Contacts';
+import { Brand } from '@/components/Nav';
 import { Evidence } from '@/components/Evidence';
 import { RoleList } from '@/components/RoleList';
 import { Trend } from '@/components/Trend';
@@ -208,7 +209,9 @@ export default async function CompanyPage({
 
   return (
     <main className="mx-auto max-w-[1100px] px-4 py-6">
-      <nav className="mb-4 text-[13px]">
+      <nav className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-[var(--line)] pb-2 text-[13px]">
+        <Brand />
+        <span className="mx-1 h-4 w-px bg-[var(--line-strong)]" aria-hidden />
         <a
           href={from}
           className="text-[var(--ink-soft)] hover:text-[var(--accent)] hover:underline"
@@ -375,7 +378,18 @@ export default async function CompanyPage({
         </div>
       </header>
 
-      <div className="mt-5 grid gap-4 lg:grid-cols-[1.35fr_1fr]">
+      <Contacts
+        companyId={company.id}
+        companyLabel={company.label}
+        contacts={contacts}
+        stages={stages}
+        lookup={lookup}
+        back={back}
+        findHref={findHref}
+        message={message}
+      />
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-[1.35fr_1fr]">
         <section className="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-4">
           <div className="mb-2 flex flex-wrap items-baseline justify-between gap-3">
             <h2 className="text-[13px] font-semibold tracking-tight">Open roles over time</h2>
@@ -435,17 +449,6 @@ export default async function CompanyPage({
           ats={ats}
         />
       </div>
-
-      <Contacts
-        companyId={company.id}
-        companyLabel={company.label}
-        contacts={contacts}
-        stages={stages}
-        lookup={lookup}
-        back={back}
-        findHref={findHref}
-        message={message}
-      />
 
       <section className="mt-4 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-4">
         <h2 className="mb-3 text-[13px] font-semibold tracking-tight">
