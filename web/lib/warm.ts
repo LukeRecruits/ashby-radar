@@ -24,7 +24,9 @@ export type WarmCompany = {
   profile_matches: number;
   all_ambiguous: boolean;
   newest_connected_on: string | null;
-  imported_at: string;
+  imported_at: string | null;
+  /** Active DDR newsletter subscribers at this company's domain. A count, never names. */
+  subscribers: number;
 };
 
 export type WarmConnection = {
@@ -55,7 +57,7 @@ export async function fetchWarmCompanies(scope: WarmScope): Promise<WarmCompany[
       .select(
         'company_id, label, domain, source, open_roles, role_band, is_prospect, recruiter_roles, ' +
           'stale_roles_120, connections, talent_connections, profile_matches, all_ambiguous, ' +
-          'newest_connected_on, imported_at',
+          'newest_connected_on, imported_at, subscribers',
       )
       .eq('status', 'active')
       .is('parked_at', null);
@@ -104,4 +106,11 @@ export async function fetchWarmConnections(ids: string[]): Promise<Map<string, W
 
 export function connectedYear(on: string | null): string | null {
   return on && /^\d{4}/.test(on) ? on.slice(0, 4) : null;
+}
+
+/** Active newsletter subscribers at one company, for the company page. */
+export async function fetchSubscriberCount(id: string): Promise<number> {
+  const { data, error } = await db().from('lead_warm').select('subscribers').eq('company_id', id).maybeSingle();
+  if (error) throw new Error(`lead_warm read failed: ${error.message}`);
+  return (data?.subscribers as number | undefined) ?? 0;
 }

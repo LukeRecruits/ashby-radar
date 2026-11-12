@@ -765,6 +765,16 @@ import and by trigger. Contacts who turn out to be connections get `is_connectio
 First import: 3,906 connections at 1,779 companies, 661 of them on the talent team the
 sweep found; 801 of the companies are in-band prospects.
 
+### Newsletter subscribers
+
+Migration 0028. `tools/subscriber_import.py` reads Luke's beehiiv export on his machine,
+**drops every row whose status is not `active`** (unsubscribed), matches each email
+domain (or a parent of it) to a Radar company's domain, and sends only
+`{company_id, count}` through `replace_company_subscribers()`, same single-use token.
+No email or name is stored: people subscribed to a newsletter, not to be prospected.
+First import: 4,058 rows, 245 inactive skipped, 189 matched at 169 companies, 49 of
+them with no LinkedIn connection. `lead_warm` now includes those too.
+
 ## Hiring stats
 
 Added 2026-11-12 (migration 0026). Recruiter load (open roles per recruiter found by the

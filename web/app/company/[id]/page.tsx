@@ -29,7 +29,7 @@ import { fetchContacts } from '@/lib/contacts';
 import { fetchPeople } from '@/lib/people';
 import { findTalentContacts, type LookupResult } from '@/lib/exa';
 import { fetchStages } from '@/lib/queue';
-import { connectedYear, fetchWarmConnections, type WarmConnection } from '@/lib/warm';
+import { connectedYear, fetchSubscriberCount, fetchWarmConnections, type WarmConnection } from '@/lib/warm';
 import {
   MIN_CLOSURES_FOR_MEDIAN,
   fetchStats,
@@ -185,13 +185,18 @@ function HiringStats({
  * Luke's own LinkedIn connections here, from his data export (migration 0027). Renders
  * nothing when there are none: absence is the normal state for most companies.
  */
-function WhoYouKnow({ people }: { people: WarmConnection[] }) {
-  if (!people.length) return null;
+function WhoYouKnow({ people, subscribers }: { people: WarmConnection[]; subscribers: number }) {
+  if (!people.length && !subscribers) return null;
   return (
     <section className="border-b border-[var(--line)] py-5">
       <h2 className="text-[13px] font-semibold uppercase tracking-wide text-[var(--ink-soft)]">
-        Who you know here · {people.length}
+        Who you know here{people.length ? ` · ${people.length}` : ''}
       </h2>
+      {subscribers ? (
+        <p className="mt-1 text-[13px] text-[var(--accent)]" title="Active subscribers with an email address at this company's domain. Counted, never named.">
+          {subscribers} active newsletter subscriber{subscribers === 1 ? '' : 's'} here
+        </p>
+      ) : null}
       <ul className="mt-2 grid gap-x-8 gap-y-1 text-[13px] sm:grid-cols-2">
         {people.map((c) => {
           const year = connectedYear(c.connected_on);
@@ -280,7 +285,7 @@ export default async function CompanyPage({
   const { id } = await params;
   if (!isCompanyId(id)) notFound();
 
-  const [page, query, contacts, stages, stored, statsMap, warmMap] = await Promise.all([
+  const [page, query, contacts, stages, stored, statsMap, warmMap, subscribers] = await Promise.all([
     fetchCompany(id),
     searchParams,
     fetchContacts(id),
@@ -288,6 +293,7 @@ export default async function CompanyPage({
     fetchPeople(id),
     fetchStats([id]),
     fetchWarmConnections([id]),
+    fetchSubscriberCount(id),
   ]);
   if (!page) notFound();
   const stats = statsMap.get(id);
@@ -523,7 +529,7 @@ export default async function CompanyPage({
         <HiringStats openRoles={company.open_roles} stats={stats} />
       </header>
 
-      <WhoYouKnow people={warm} />
+      <WhoYouKnow people={warm} subscribers={subscribers} />
 
       <Contacts
         companyId={company.id}

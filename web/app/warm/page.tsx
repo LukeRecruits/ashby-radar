@@ -77,8 +77,10 @@ export default async function Page({
 
   const onTeam = companies.filter((c) => c.profile_matches > 0).length;
   const talent = companies.filter((c) => c.talent_connections > 0).length;
-  const imported = companies[0]?.imported_at
-    ? new Date(companies[0].imported_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+  const readers = companies.filter((c) => c.subscribers > 0).length;
+  const importedAt = companies.find((c) => c.imported_at)?.imported_at ?? null;
+  const imported = importedAt
+    ? new Date(importedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
     : null;
   const back = encodeURIComponent(href(scope, page));
 
@@ -90,10 +92,14 @@ export default async function Page({
           <h1 className="text-xl font-semibold tracking-tight">Warm list</h1>
           <p className="mt-0.5 text-[13px] text-[var(--ink-soft)]">
             Companies where you already know somebody, from your LinkedIn connections
-            {imported ? ` (imported ${imported})` : ''}. A message, not an invitation.
+            {imported ? ` (imported ${imported})` : ''}, or where people read your newsletter.
           </p>
         </div>
         <div className="flex gap-7 text-center">
+          <div title="Active newsletter subscribers have an email address at the company's domain">
+            <div className="nums text-lg font-semibold leading-tight">{readers.toLocaleString('en-GB')}</div>
+            <div className="text-[11px] uppercase tracking-wide text-[var(--ink-faint)]">Newsletter readers</div>
+          </div>
           <div>
             <div className="nums text-lg font-semibold leading-tight">{companies.length.toLocaleString('en-GB')}</div>
             <div className="text-[11px] uppercase tracking-wide text-[var(--ink-faint)]">Companies</div>
@@ -151,10 +157,22 @@ export default async function Page({
                         {c.label}
                       </a>
                       <div className="mt-0.5 text-[11px] text-[var(--ink-faint)]">
-                        {c.domain ?? 'No domain yet'} · {c.connections} connection{c.connections === 1 ? '' : 's'}
+                        {c.domain ?? 'No domain yet'}
+                        {c.connections ? ` · ${c.connections} connection${c.connections === 1 ? '' : 's'}` : ''}
                       </div>
+                      {c.subscribers ? (
+                        <div
+                          className="mt-0.5 text-[11px] font-medium text-[var(--accent)]"
+                          title="Active Data Driven Recruiter newsletter subscribers with an email address at this company's domain"
+                        >
+                          {c.subscribers} newsletter subscriber{c.subscribers === 1 ? '' : 's'}
+                        </div>
+                      ) : null}
                     </td>
                     <td className={TD}>
+                      {!list.length ? (
+                        <span className="text-[11px] text-[var(--ink-faint)]">No LinkedIn connection</span>
+                      ) : null}
                       <ul className="space-y-0.5">
                         {list.slice(0, SHOWN).map((p) => (
                           <Person key={p.linkedin_key} c={p} />
