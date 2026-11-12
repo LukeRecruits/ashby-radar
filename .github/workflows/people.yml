@@ -5,6 +5,10 @@ on:
     # Daily 06:30 UTC, after the 05:00 refresh, so "in band" is today's answer.
     - cron: '30 6 * * *'
   workflow_dispatch:
+    inputs:
+      profile_limit:
+        description: 'Companies to profile this run (blank = config default)'
+        required: false
 
 concurrency:
   group: people
@@ -32,3 +36,12 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
         run: npm run people
+
+      - name: Look up headcount and funding for in-band prospects
+        if: ${{ !cancelled() }}
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
+          PROFILE_LIMIT: ${{ inputs.profile_limit }}
+        run: npm run profiles

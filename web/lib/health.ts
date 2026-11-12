@@ -40,6 +40,7 @@ export const CADENCE: Record<string, { label: string; hours: number | null; note
   triggers: { label: 'Triggers', hours: 30, note: 'Daily, 07:15 UTC' },
   retention: { label: 'Retention', hours: 24 * 35, note: 'Monthly, 1st 04:00 UTC' },
   people: { label: 'People sweep', hours: 30, note: 'Daily 06:30 UTC' },
+  profiles: { label: 'Company profiles', hours: 30, note: 'Daily, after the people sweep' },
   export: { label: 'Export', hours: null, note: 'Manual only' },
   digest: { label: 'Digest', hours: null, note: 'Retired. Should not run' },
 };

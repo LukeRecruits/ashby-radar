@@ -248,6 +248,31 @@ export const config = {
     retentionMonths: 24,
   },
 
+  outcomes: {
+    /**
+     * Job outcomes per company, rebuilt every morning by the triggers run (migration
+     * 0026). Closures inside the window count. A closure with the same title reappearing
+     * within swapDays either side is a reposted advert, not a role coming down, and is
+     * left out: on 2026-11-12 that was 20-26% of all closures. A real closure whose title
+     * returns between swapDays and repostDays later is a role that came back.
+     */
+    windowDays: 90,
+    swapDays: 3,
+    repostDays: 60,
+  },
+
+  profiles: {
+    /**
+     * One Exa company search per in-band prospect with a domain, for headcount and
+     * funding. Company data only, nobody's personal data. Runs after the people sweep in
+     * the same workflow. About $0.005 a search; a full pass of ~3,100 is ~$15.
+     */
+    companiesPerRun: 500,
+    /** Headcount and funding move slowly. */
+    refreshDays: 180,
+    concurrency: 4,
+  },
+
   exports: {
     /** Written here, then uploaded as workflow artifacts. */
     outputDir: 'out',

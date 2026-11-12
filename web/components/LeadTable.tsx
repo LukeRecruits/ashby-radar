@@ -12,6 +12,7 @@
 
 import { SIGNALS, atsLabel, type Lead } from '@/lib/leads';
 import type { PeopleSummary } from '@/lib/people';
+import { recruiterLoad, type CompanyStats } from '@/lib/stats';
 
 /**
  * The company name opens the company page rather than the job board, because the page is
@@ -69,6 +70,20 @@ function PeopleCell({ summary }: { summary: PeopleSummary | undefined }) {
   );
 }
 
+/** Open roles per recruiter. Warm when one person is carrying 15 or more. */
+function LoadCell({ openRoles, stats }: { openRoles: number; stats: CompanyStats | undefined }) {
+  const load = recruiterLoad(openRoles, stats);
+  if (!load) return <span className="text-[var(--ink-faint)]">&ndash;</span>;
+  return (
+    <span
+      title={load.note}
+      className={load.heavy ? 'font-medium text-[var(--warm)]' : 'text-[var(--ink-soft)]'}
+    >
+      {load.value === 'No recruiter' ? 'None' : load.value}
+    </span>
+  );
+}
+
 function Chip({ label, title }: { label: string; title: string }) {
   return (
     <span
@@ -120,10 +135,12 @@ const TD = 'px-3 py-2 align-top';
 export function LeadTable({
   rows,
   people,
+  stats,
   backQuery = '',
 }: {
   rows: Lead[];
   people?: Map<string, PeopleSummary>;
+  stats?: Map<string, CompanyStats>;
   backQuery?: string;
 }) {
   if (!rows.length) {
@@ -143,6 +160,9 @@ export function LeadTable({
             <th className={TH}>People team</th>
             <th className={TH}>Hiring in</th>
             <th className={`${TH} text-right`}>Open</th>
+            <th className={`${TH} text-right`} title="Open roles per recruiter on the team the people sweep found">
+              Per recruiter
+            </th>
             <th className={`${TH} text-right`}>30d</th>
             <th className={TH}>Recruiter req</th>
             <th className={`${TH} text-right`}>Pay shown</th>
@@ -218,6 +238,9 @@ export function LeadTable({
                 </td>
 
                 <td className={`${TD} nums text-right font-medium`}>{lead.open_roles}</td>
+                <td className={`${TD} nums text-right`}>
+                  <LoadCell openRoles={lead.open_roles} stats={stats?.get(lead.id)} />
+                </td>
                 <td className={`${TD} nums text-right`}>
                   <Change value={lead.open_roles_change_30d} />
                 </td>

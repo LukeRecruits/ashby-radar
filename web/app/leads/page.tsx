@@ -13,6 +13,7 @@
 import { FilterBar } from '@/components/FilterBar';
 import { LeadTable } from '@/components/LeadTable';
 import { fetchPeopleSummaries } from '@/lib/people';
+import { fetchStats } from '@/lib/stats';
 import { Nav } from '@/components/Nav';
 import {
   PAGE_SIZE,
@@ -53,7 +54,8 @@ export default async function Page({
     fetchTotals(),
   ]);
 
-  const people = await fetchPeopleSummaries(rows.map((r) => r.id));
+  const ids = rows.map((r) => r.id);
+  const [people, stats] = await Promise.all([fetchPeopleSummaries(ids), fetchStats(ids)]);
 
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const page = Math.min(filters.page, pages);
@@ -100,7 +102,7 @@ export default async function Page({
       <div className="mt-4">
         {/* The current segment, handed to each row so the company page can offer a way
             back into it rather than back to an unfiltered list. */}
-        <LeadTable rows={rows} people={people} backQuery={toQuery({ ...filters, page })} />
+        <LeadTable rows={rows} people={people} stats={stats} backQuery={toQuery({ ...filters, page })} />
       </div>
 
       <nav className="mt-4 flex items-center justify-between text-[13px]">

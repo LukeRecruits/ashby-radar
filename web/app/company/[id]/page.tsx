@@ -30,6 +30,13 @@ import { fetchPeople } from '@/lib/people';
 import { findTalentContacts, type LookupResult } from '@/lib/exa';
 import { fetchStages } from '@/lib/queue';
 import {
+  MIN_CLOSURES_FOR_MEDIAN,
+  fetchStats,
+  money,
+  recruiterLoad,
+  type CompanyStats,
+} from '@/lib/stats';
+import {
   ROLE_SAMPLE,
   WORKPLACE_LABELS,
   fetchCompany,
@@ -84,6 +91,91 @@ function Stat({
       {note ? (
         <div className="mt-0.5 text-[11px] text-[var(--ink-soft)]">{note}</div>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * The second stat row: how stretched the talent team is, how long their adverts stay up,
+ * how often a role comes back, and how big the company is. Each says plainly when it has
+ * no figure yet, because the sweeps reach companies a few hundred a day.
+ */
+function HiringStats({
+  openRoles,
+  stats,
+}: {
+  openRoles: number;
+  stats: CompanyStats | undefined;
+}) {
+  const load = recruiterLoad(openRoles, stats);
+  const closed = stats?.closed_count ?? null;
+  const reposts = stats?.repost_count ?? 0;
+  const round = stats?.latest_round_name
+    ? [stats.latest_round_name, money(stats.latest_round_usd), stats.latest_round_date?.slice(0, 7)]
+        .filter(Boolean)
+        .join(', ')
+    : null;
+
+  return (
+    <div className="mt-4 flex flex-wrap gap-x-9 gap-y-4 border-t border-[var(--line)] pt-4">
+      <Stat
+        label="Roles per recruiter"
+        value={load ? load.value : '–'}
+        note={load ? load.note : 'Talent team not searched yet'}
+        hint="Open roles divided by the recruiters the people sweep found. Exa returns at most ten people per company, so a large team is undercounted."
+        tone={load?.heavy ? 'warm' : undefined}
+      />
+      <Stat
+        label="Ads taken down, 90d"
+        value={closed === null ? '–' : String(closed)}
+        note={
+          closed === null
+            ? 'None seen yet'
+            : stats?.swap_count
+              ? `Plus ${stats.swap_count} reposted the same week`
+              : 'No same-week reposts'
+        }
+        hint="Adverts that came down, not counting the ones replaced by the same title within three days. Down can mean hired, paused or cancelled."
+      />
+      <Stat
+        label="Median days live"
+        value={
+          closed !== null && closed >= MIN_CLOSURES_FOR_MEDIAN && stats?.median_days_live != null
+            ? String(stats.median_days_live)
+            : '–'
+        }
+        note={
+          closed !== null && closed >= MIN_CLOSURES_FOR_MEDIAN
+            ? 'From posting to taken down'
+            : `Needs ${MIN_CLOSURES_FOR_MEDIAN} or more taken down`
+        }
+        hint="How long their adverts stayed up before coming down. Not a time to hire: an advert can come down because the role was paused."
+      />
+      <Stat
+        label="Came back"
+        value={closed === null ? '–' : String(reposts)}
+        note={reposts ? 'Roles reposted 3 to 60 days after coming down' : 'No role has come back'}
+        hint="A role taken down and posted again under the same title 3 to 60 days later. Usually a hire that fell through or a search restarted."
+        tone={reposts >= 2 ? 'warm' : undefined}
+      />
+      <Stat
+        label="Headcount"
+        value={stats?.headcount ? stats.headcount.toLocaleString('en-GB') : '–'}
+        note={
+          !stats?.profile_searched_at
+            ? 'Not looked up yet'
+            : !stats.profile_matched
+              ? 'No match found'
+              : stats.founded_year
+                ? `Founded ${stats.founded_year}`
+                : 'Estimate, from Exa'
+        }
+      />
+      <Stat
+        label="Funding"
+        value={money(stats?.funding_total_usd ?? null) ?? '–'}
+        note={round ?? (stats?.profile_matched ? 'No round on record' : 'From Exa, when found')}
+      />
     </div>
   );
 }
@@ -145,14 +237,16 @@ export default async function CompanyPage({
   const { id } = await params;
   if (!isCompanyId(id)) notFound();
 
-  const [page, query, contacts, stages, stored] = await Promise.all([
+  const [page, query, contacts, stages, stored, statsMap] = await Promise.all([
     fetchCompany(id),
     searchParams,
     fetchContacts(id),
     fetchStages(),
     fetchPeople(id),
+    fetchStats([id]),
   ]);
   if (!page) notFound();
+  const stats = statsMap.get(id);
 
   const { company, groups, history, signals, oldestRoles, newestRoles } = page;
   const ats = atsLabel(company.source);
@@ -378,6 +472,8 @@ export default async function CompanyPage({
             }
           />
         </div>
+
+        <HiringStats openRoles={company.open_roles} stats={stats} />
       </header>
 
       <Contacts

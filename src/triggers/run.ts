@@ -148,6 +148,26 @@ async function main(): Promise<void> {
       }
     }
 
+    // Job outcomes (migration 0026) are rebuilt whole here, once the refresh has closed
+    // today's jobs. A failure is recorded like a rule failure rather than thrown, so the
+    // signals still land.
+    let outcomes: number | null = null;
+    try {
+      const { windowDays, swapDays, repostDays } = config.outcomes;
+      const { data, error } = await supabase().rpc('refresh_job_outcomes', {
+        p_window_days: windowDays,
+        p_swap_days: swapDays,
+        p_repost_days: repostDays,
+      });
+      if (error) throw new Error(error.message);
+      outcomes = typeof data === 'number' ? data : null;
+      log.info('job outcomes rebuilt', { companies: outcomes });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      problems.push(`outcomes: ${message}`);
+      log.error('job outcomes failed', { error: message });
+    }
+
     const total = Object.values(fired).reduce((sum, n) => sum + n, 0);
     const notes = JSON.stringify(
       {
@@ -155,6 +175,7 @@ async function main(): Promise<void> {
         backfillMarkers,
         fired,
         total,
+        outcomes,
         problems,
       },
       null,

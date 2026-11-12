@@ -17,6 +17,7 @@
     "export": "tsx src/export/run.ts",
     "retention": "tsx src/retention/run.ts",
     "people": "tsx src/people/run.ts",
+    "profiles": "tsx src/profile/run.ts",
     "typecheck": "tsc --noEmit",
     "clay-companies": "tsx src/handoff/companies.ts"
   },
