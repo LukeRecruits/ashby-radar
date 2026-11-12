@@ -6,8 +6,8 @@
  * result. The people search does not carry any of this, so it is a second, separate
  * search. Company data only: nobody's personal data is read or stored here.
  *
- * A result is accepted only when its URL is on the company's own domain, or its entity
- * name matches our name for the company exactly once normalised. Exa ranks look-alikes
+ * A result is accepted only when its URL is on the company's own domain, or it is a
+ * LinkedIn company page whose name matches ours exactly once normalised. Exa ranks look-alikes
  * highly ("Atlas" returns Atlas Copco), and a wrong headcount is worse than none, so an
  * unmatched search is recorded as `matched = false` and shown as "No match found".
  */
@@ -91,10 +91,19 @@ async function profileOne(row: QueueRow): Promise<{ matched: boolean } | { error
   const withEntity = results
     .map((r) => ({ r, e: r.entities?.find((e) => e.type === 'company')?.properties }))
     .filter((x) => x.e);
-  // Domain first, because it is proof; then an exact normalised name.
+  // Domain first, because it is proof. Then an exact normalised name, but only on a
+  // LinkedIn company page: a name match on some other website is a different company
+  // with the same name (the first test run matched AlpineCare, alpinecare.com, to
+  // alpinecare.net with a headcount of 3).
   const hit =
     withEntity.find((x) => onDomain(x.r.url, row.domain)) ??
-    withEntity.find((x) => !!label && !!x.e?.name && norm(x.e.name) === label);
+    withEntity.find(
+      (x) =>
+        !!label &&
+        !!x.e?.name &&
+        norm(x.e.name) === label &&
+        /^https?:\/\/([a-z]+\.)?linkedin\.com\/company\//i.test(x.r.url ?? ''),
+    );
 
   const e = hit?.e;
   const round = e?.financials?.fundingLatestRound ?? null;
