@@ -741,6 +741,39 @@ of `src/greenhouse/boardApi.ts` and `src/discovery/greenhouseToken.ts`.
 - Paced at about two requests a second (`config.greenhouse.requestDelayMs`), because a
   board is two requests and ~10,000 boards at one a second does not fit in a GitHub job.
 
+## Warm list
+
+Added 2026-11-12 (migration 0027, route `/warm`). Luke's own LinkedIn connections at
+Radar companies, from his LinkedIn data export (Settings, Data privacy, Download your
+data, the larger archive: `Connections.csv` is inside). Replaces checking LinkedIn by
+hand for each company.
+
+`tools/warm_import.py` does the matching **on Luke's machine** and sends only connections
+at a Radar company; the rest of his network never reaches the database. Two match types:
+`profile` (the connection is someone the people sweep found on the talent team, exact on
+profile URL) and `employer` (their stated employer has a Radar company's name; flagged
+`ambiguous` when the name fits several). Ava Labs, CandidHQ and "Stealth" employers are
+never matched by name.
+
+Each import replaces the table whole through `replace_warm_connections()`, which takes a
+single-use token: put `sha256(token)` in `settings.warm_import_token_sha256`, run the
+script with `WARM_IMPORT_TOKEN` and `--send`, and the function deletes the hash on
+success. Asserted from outside on 2026-11-12: a wrong token is refused, the same token
+is refused the second time, anon cannot read `warm_connections`. Suppression applies on
+import and by trigger. Contacts who turn out to be connections get `is_connection` set.
+
+First import: 3,906 connections at 1,779 companies, 661 of them on the talent team the
+sweep found; 801 of the companies are in-band prospects.
+
+## Hiring stats
+
+Added 2026-11-12 (migration 0026). Recruiter load (open roles per recruiter found by the
+people sweep, `is_recruiting_title()`), adverts taken down / median days live / roles
+that came back, rebuilt by the triggers run via `refresh_job_outcomes()`, and headcount
+and funding from the `profiles` step in `people.yml`. **A closed job is not a filled
+job**: 20-26% of closures are the same title reposted within three days, counted as swaps
+and excluded. Profiles accept a domain match, or an exact name on a LinkedIn company page.
+
 ## Out of scope
 
 Other ATSs (Lever, Workable) are designed for as a future `source` value but not built. Email addresses are out of scope: outreach is LinkedIn, by hand, using Luke's

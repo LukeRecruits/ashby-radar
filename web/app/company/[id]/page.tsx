@@ -29,6 +29,7 @@ import { fetchContacts } from '@/lib/contacts';
 import { fetchPeople } from '@/lib/people';
 import { findTalentContacts, type LookupResult } from '@/lib/exa';
 import { fetchStages } from '@/lib/queue';
+import { connectedYear, fetchWarmConnections, type WarmConnection } from '@/lib/warm';
 import {
   MIN_CLOSURES_FOR_MEDIAN,
   fetchStats,
@@ -180,6 +181,48 @@ function HiringStats({
   );
 }
 
+/**
+ * Luke's own LinkedIn connections here, from his data export (migration 0027). Renders
+ * nothing when there are none: absence is the normal state for most companies.
+ */
+function WhoYouKnow({ people }: { people: WarmConnection[] }) {
+  if (!people.length) return null;
+  return (
+    <section className="border-b border-[var(--line)] py-5">
+      <h2 className="text-[13px] font-semibold uppercase tracking-wide text-[var(--ink-soft)]">
+        Who you know here · {people.length}
+      </h2>
+      <ul className="mt-2 grid gap-x-8 gap-y-1 text-[13px] sm:grid-cols-2">
+        {people.map((c) => {
+          const year = connectedYear(c.connected_on);
+          return (
+            <li key={c.linkedin_key}>
+              <a
+                href={c.linkedin_url}
+                target="_blank"
+                rel="noreferrer noopener"
+                className={`hover:text-[var(--accent)] hover:underline ${c.is_talent ? 'font-medium' : ''}`}
+              >
+                {c.full_name}
+              </a>
+              <span className="text-[var(--ink-soft)]">{c.position ? ` · ${c.position}` : ''}</span>
+              {c.match_type === 'profile' ? (
+                <span className="ml-1.5 text-[11px] font-medium text-[var(--good)]">On their talent team</span>
+              ) : null}
+              {c.ambiguous ? (
+                <span className="ml-1.5 text-[11px] text-[var(--warm)]" title="Their employer's name matches more than one company on Radar">
+                  Check employer
+                </span>
+              ) : null}
+              {year ? <span className="ml-1.5 text-[11px] text-[var(--ink-faint)]">since {year}</span> : null}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
@@ -237,16 +280,18 @@ export default async function CompanyPage({
   const { id } = await params;
   if (!isCompanyId(id)) notFound();
 
-  const [page, query, contacts, stages, stored, statsMap] = await Promise.all([
+  const [page, query, contacts, stages, stored, statsMap, warmMap] = await Promise.all([
     fetchCompany(id),
     searchParams,
     fetchContacts(id),
     fetchStages(),
     fetchPeople(id),
     fetchStats([id]),
+    fetchWarmConnections([id]),
   ]);
   if (!page) notFound();
   const stats = statsMap.get(id);
+  const warm = warmMap.get(id) ?? [];
 
   const { company, groups, history, signals, oldestRoles, newestRoles } = page;
   const ats = atsLabel(company.source);
@@ -260,6 +305,8 @@ export default async function CompanyPage({
   const backLabel =
     from === '/'
       ? 'Back to the work queue'
+      : from.startsWith('/warm')
+        ? 'Back to the warm list'
       : from.includes('?')
         ? 'Back to the filtered list'
         : 'Back to the lead list';
@@ -475,6 +522,8 @@ export default async function CompanyPage({
 
         <HiringStats openRoles={company.open_roles} stats={stats} />
       </header>
+
+      <WhoYouKnow people={warm} />
 
       <Contacts
         companyId={company.id}

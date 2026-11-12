@@ -9,6 +9,7 @@
 const LINKS = [
   { href: '/', label: 'Work queue', hint: 'Who is waiting on you today' },
   { href: '/leads', label: 'Lead list', hint: 'Every company, filtered' },
+  { href: '/warm', label: 'Warm list', hint: 'Companies where you already know somebody' },
   { href: '/health', label: 'Health', hint: 'Whether the scheduled half is still working' },
 ];
 
@@ -29,7 +30,7 @@ export function Brand() {
   );
 }
 
-export function Nav({ current }: { current: '/' | '/leads' | '/health' }) {
+export function Nav({ current }: { current: '/' | '/leads' | '/warm' | '/health' }) {
   return (
     <nav className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-[var(--line)] pb-2 text-[13px]">
       <Brand />
