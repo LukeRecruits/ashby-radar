@@ -25,7 +25,7 @@ export type WarmCompany = {
   all_ambiguous: boolean;
   newest_connected_on: string | null;
   imported_at: string | null;
-  /** Active DDR newsletter subscribers at this company's domain. A count, never names. */
+  /** Active DDR newsletter subscribers at this company's domain. Who they are: fetchSubscribers. */
   subscribers: number;
 };
 
@@ -113,4 +113,41 @@ export async function fetchSubscriberCount(id: string): Promise<number> {
   const { data, error } = await db().from('lead_warm').select('subscribers').eq('company_id', id).maybeSingle();
   if (error) throw new Error(`lead_warm read failed: ${error.message}`);
   return (data?.subscribers as number | undefined) ?? 0;
+}
+
+export type Subscriber = { email: string; subscribed_on: string | null };
+
+/**
+ * Who the subscribers are (migration 0029). The addresses are not on any anon view, since
+ * the publishable key is public; the function checks the console's write token. Null when
+ * the token is unset, so the page falls back to the count.
+ */
+export async function fetchSubscribers(id: string): Promise<Subscriber[] | null> {
+  const token = process.env.CONSOLE_WRITE_TOKEN?.trim();
+  if (!token) return null;
+  const { data, error } = await db().rpc('company_subscriber_emails', { p_token: token, p_company_id: id });
+  if (error) throw new Error(`company_subscriber_emails failed: ${error.message}`);
+  return (data ?? []) as Subscriber[];
+}
+
+const letters = (s: string) => s.toLowerCase().normalize('NFD').replace(/[^a-z]/g, '');
+
+/**
+ * The beehiiv export has addresses, not names, so match the address to somebody already
+ * known at the company: jane.smith@, janesmith@, jsmith@, jane@ and the like. Only a
+ * single match counts; two people who both fit means no guess.
+ */
+export function guessSubscriber(email: string, names: string[]): string | null {
+  const local = letters(email.split('@')[0] ?? '');
+  if (local.length < 3) return null;
+  const hits = new Set<string>();
+  for (const name of names) {
+    const parts = name.split(/\s+/).map(letters).filter(Boolean);
+    if (parts.length < 2) continue;
+    const first = parts[0];
+    const last = parts[parts.length - 1];
+    const forms = [first + last, first[0] + last, last + first, first + last[0], last, first];
+    if (forms.some((f) => f.length >= 3 && f === local)) hits.add(name);
+  }
+  return hits.size === 1 ? [...hits][0] : null;
 }

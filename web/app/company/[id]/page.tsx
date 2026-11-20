@@ -29,7 +29,15 @@ import { fetchContacts } from '@/lib/contacts';
 import { fetchPeople } from '@/lib/people';
 import { findTalentContacts, type LookupResult } from '@/lib/exa';
 import { fetchStages } from '@/lib/queue';
-import { connectedYear, fetchSubscriberCount, fetchWarmConnections, type WarmConnection } from '@/lib/warm';
+import {
+  connectedYear,
+  fetchSubscriberCount,
+  fetchSubscribers,
+  fetchWarmConnections,
+  guessSubscriber,
+  type Subscriber,
+  type WarmConnection,
+} from '@/lib/warm';
 import {
   MIN_CLOSURES_FOR_MEDIAN,
   fetchStats,
@@ -185,17 +193,50 @@ function HiringStats({
  * Luke's own LinkedIn connections here, from his data export (migration 0027). Renders
  * nothing when there are none: absence is the normal state for most companies.
  */
-function WhoYouKnow({ people, subscribers }: { people: WarmConnection[]; subscribers: number }) {
+function WhoYouKnow({
+  people,
+  subscribers,
+  readers,
+  knownNames,
+}: {
+  people: WarmConnection[];
+  subscribers: number;
+  /** Null when the console cannot read addresses, so only the count shows. */
+  readers: Subscriber[] | null;
+  knownNames: string[];
+}) {
   if (!people.length && !subscribers) return null;
   return (
     <section className="border-b border-[var(--line)] py-5">
       <h2 className="text-[13px] font-semibold uppercase tracking-wide text-[var(--ink-soft)]">
         Who you know here{people.length ? ` · ${people.length}` : ''}
       </h2>
-      {subscribers ? (
-        <p className="mt-1 text-[13px] text-[var(--accent)]" title="Active subscribers with an email address at this company's domain. Counted, never named.">
+      {subscribers && !readers?.length ? (
+        <p className="mt-1 text-[13px] text-[var(--accent)]" title="Active subscribers with an email address at this company's domain">
           {subscribers} active newsletter subscriber{subscribers === 1 ? '' : 's'} here
         </p>
+      ) : null}
+      {readers?.length ? (
+        <div className="mt-2">
+          <p className="text-[12px] font-medium text-[var(--accent)]">
+            Reads the newsletter{readers.length > 1 ? ` · ${readers.length}` : ''}
+          </p>
+          <ul className="mt-1 grid gap-x-8 gap-y-1 text-[13px] sm:grid-cols-2">
+            {readers.map((r) => {
+              const name = guessSubscriber(r.email, knownNames);
+              const year = r.subscribed_on?.slice(0, 4);
+              return (
+                <li key={r.email}>
+                  {name ? <span className="font-medium">{name} · </span> : null}
+                  <a href={`mailto:${r.email}`} className="hover:text-[var(--accent)] hover:underline">
+                    {r.email}
+                  </a>
+                  {year ? <span className="ml-1.5 text-[11px] text-[var(--ink-faint)]">since {year}</span> : null}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       ) : null}
       <ul className="mt-2 grid gap-x-8 gap-y-1 text-[13px] sm:grid-cols-2">
         {people.map((c) => {
@@ -285,7 +326,7 @@ export default async function CompanyPage({
   const { id } = await params;
   if (!isCompanyId(id)) notFound();
 
-  const [page, query, contacts, stages, stored, statsMap, warmMap, subscribers] = await Promise.all([
+  const [page, query, contacts, stages, stored, statsMap, warmMap, subscribers, readers] = await Promise.all([
     fetchCompany(id),
     searchParams,
     fetchContacts(id),
@@ -294,6 +335,7 @@ export default async function CompanyPage({
     fetchStats([id]),
     fetchWarmConnections([id]),
     fetchSubscriberCount(id),
+    fetchSubscribers(id),
   ]);
   if (!page) notFound();
   const stats = statsMap.get(id);
@@ -529,7 +571,14 @@ export default async function CompanyPage({
         <HiringStats openRoles={company.open_roles} stats={stats} />
       </header>
 
-      <WhoYouKnow people={warm} subscribers={subscribers} />
+      <WhoYouKnow
+        people={warm}
+        subscribers={subscribers}
+        readers={readers}
+        knownNames={[
+          ...new Set([...warm.map((w) => w.full_name), ...stored.people.map((p) => p.name), ...contacts.map((c) => c.full_name)]),
+        ]}
+      />
 
       <Contacts
         companyId={company.id}

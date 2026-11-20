@@ -771,9 +771,19 @@ Migration 0028. `tools/subscriber_import.py` reads Luke's beehiiv export on his 
 **drops every row whose status is not `active`** (unsubscribed), matches each email
 domain (or a parent of it) to a Radar company's domain, and sends only
 `{company_id, count}` through `replace_company_subscribers()`, same single-use token.
-No email or name is stored: people subscribed to a newsletter, not to be prospected.
 First import: 4,058 rows, 245 inactive skipped, 189 matched at 169 companies, 49 of
 them with no LinkedIn connection. `lead_warm` now includes those too.
+
+Migration 0029 (2026-11-20) adds who: the import also sends each matched subscriber's
+email and subscription date into `company_subscriber_emails`, and the company page lists
+them under "Who you know here". Everybody not at a Radar company stays on Luke's machine.
+The export has no names, so the page guesses one by matching the address (jane.smith@,
+jsmith@, jane@...) to a connection, a people-sweep row or a contact at that company, and
+shows a name only when exactly one person fits. The addresses are **not** on an anon
+view: the publishable key is in this public repo. They are read through
+`company_subscriber_emails(token, company_id)`, which checks the console write token.
+Asserted from outside 2026-11-20: anon select on the table is refused, a wrong token is
+refused. Import that day: 198 matched, 211 addresses at 178 companies.
 
 ## Hiring stats
 

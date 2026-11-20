@@ -1,10 +1,11 @@
 """
-Import DDR newsletter subscribers into the warm list as a count per company (migration 0028).
+Import DDR newsletter subscribers into the warm list (migrations 0028, 0029).
 
 Runs on Luke's machine against his beehiiv subscriber export. Only `active` rows are
 used; unsubscribed (inactive) subscribers are dropped before anything else happens. Each
-email's domain, or a parent of it, is matched to a Radar company's domain, and only
-{company_id, count} is sent. No email address or name leaves the machine.
+email's domain, or a parent of it, is matched to a Radar company's domain, and only the
+matched subscribers are sent: {company_id, count, emails: [{email, subscribed_on}]}.
+Everybody else on the list stays on this machine.
 
     python3 -I tools/subscriber_import.py path/to/subscribers.csv            # dry run
     WARM_IMPORT_TOKEN=... python3 -I tools/subscriber_import.py path/to/subscribers.csv --send
@@ -39,22 +40,27 @@ def main():
 
     rows = list(csv.DictReader(open(src, encoding='utf-8-sig')))
     active = [r for r in rows if (r.get('status') or '').strip().lower() == 'active']
-    counts, matched = collections.Counter(), 0
+    emails, matched = collections.defaultdict(dict), 0
     for r in active:
-        parts = (r.get('email') or '').strip().lower().rsplit('@', 1)[-1].split('.')
+        email = (r.get('email') or '').strip().lower()
+        parts = email.rsplit('@', 1)[-1].split('.')
         for i in range(len(parts) - 1):
             ids = by_domain.get('.'.join(parts[i:]))
             if ids:
                 matched += 1
                 for cid in ids:
-                    counts[cid] += 1
+                    emails[cid][email] = (r.get('created_at') or '')[:10] or None
                 break
 
     print(f'{len(rows)} rows, {len(active)} active, {len(rows) - len(active)} skipped as not active; '
-          f'{matched} matched at {len(counts)} companies')
+          f'{matched} matched at {len(emails)} companies')
     if not send:
         return
-    payload = [{'company_id': k, 'subscribers': v} for k, v in counts.items()]
+    payload = [
+        {'company_id': k, 'subscribers': len(v),
+         'emails': [{'email': e, 'subscribed_on': d} for e, d in v.items()]}
+        for k, v in emails.items()
+    ]
     req = urllib.request.Request(
         f'{URL}rpc/replace_company_subscribers',
         data=json.dumps({'p_token': os.environ['WARM_IMPORT_TOKEN'], 'p_rows': payload}).encode(),
